@@ -4,25 +4,47 @@ A lightweight Python toolkit for surveying computation, least-squares adjustment
 
 > 轻量级 Python 测量计算、测量平差与可视化工具包。
 
-## What it does
+## Current version
 
-pySurveying deliberately stays small. It focuses on the common calculations that surveying students and engineers repeatedly need:
+**0.2.0**
 
-- distance, azimuth and coordinate forward/inverse calculation
+pySurveying deliberately stays small. It is intended for common surveying calculations, teaching examples, engineering data checks, and small control-network adjustment rather than as a replacement for a full geodetic production system.
+
+## Features
+
+- angle conversion and normalization
+- distance, surveying azimuth, coordinate forward/inverse calculation
 - forward intersection, distance intersection and resection
 - closed and connected traverse adjustment
+- angular-closure adjustment and closed traverse from measured interior angles
 - leveling-route adjustment
-- weighted least-squares adjustment
-- small 2D control-network adjustment using distance, direction and angle observations
-- free-network minimum-norm adjustment
-- Huber robust adjustment and residual-based gross-error screening
-- 2D error ellipses
-- CRS coordinate transformation via `pyproj`
-- stakeout, offset, slope and polygon-area calculations
+- weighted least-squares leveling-network adjustment
+- weighted linear least-squares adjustment
+- small 2D control-network adjustment using distance, direction/azimuth and angle observations
+- minimum-norm 2D free-network adjustment
+- Huber robust linear adjustment
+- Huber robust control-network adjustment
+- standardized residual screening, redundancy numbers and practical data snooping
+- 2D confidence error ellipses
+- CRS transformations through `pyproj`
+- WGS84 geodetic / ECEF / local ENU transformations
+- polar stakeout, straight-line offset, chainage/offset, slope, grade elevation and area
 - CSV, Excel, LandXML point and Leica GSI word import helpers
-- a lightweight Streamlit interface
+- lightweight Streamlit interface
 
-The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, but NumPy/SciPy are used for modern numerical linear algebra instead of reimplementing low-level matrix routines.
+The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, while NumPy/SciPy are used for numerical linear algebra instead of reimplementing low-level matrix routines.
+
+## Coordinate and angle conventions
+
+For the local planar surveying helpers in `basic.py`, `traverse.py` and `engineering.py`:
+
+- coordinates are stored as `(x, y)`
+- `+Y` is treated as north and `+X` as east
+- surveying azimuth is measured clockwise from north
+- angles passed to public surveying helpers are in decimal degrees unless documented otherwise
+- distances and coordinate values must use the same linear unit
+
+For CRS transformations, pyproj conventions apply. `transform_coordinates(..., always_xy=True)` uses longitude/easting first and latitude/northing second.
 
 ## Install
 
@@ -41,8 +63,9 @@ Development:
 
 ```bash
 pip install -e ".[dev,ui]"
-pytest
-ruff check src tests
+python -m pytest
+python -m ruff check src tests
+python -m build
 ```
 
 ## Quick start
@@ -58,53 +81,107 @@ print(azimuth(p1, p2))
 print(forward_coordinate(p1.x, p1.y, 30.0, 100.0))
 ```
 
-Weighted least squares:
+### Weighted least squares
 
 ```python
 import numpy as np
-from pysurveying.adjustment import least_squares
+from pysurveying import data_snooping, least_squares
 
-A = np.array([[1.0], [1.0], [1.0]])
-L = np.array([10.01, 9.99, 10.00])
+A = np.array([[1.0], [1.0], [1.0], [1.0]])
+L = np.array([10.01, 9.99, 10.00, 10.03])
 result = least_squares(A, L)
+
 print(result.parameters)
 print(result.residuals)
 print(result.sigma0)
+print(data_snooping(result))
 ```
 
-Closed traverse:
+### Closed traverse from measured angles
 
 ```python
-from pysurveying.traverse import closed_traverse
+from pysurveying import closed_traverse_from_angles
 
-result = closed_traverse(
+result = closed_traverse_from_angles(
     start=(0.0, 0.0),
-    azimuths_deg=[90.0, 0.0, 270.0, 180.0],
+    start_azimuth_deg=90.0,
+    interior_angles_deg=[90.01, 89.99, 90.02, 89.98],
     distances=[100.0, 100.0, 100.0, 100.0],
 )
+
+print(result["angle_adjustment"])
 print(result["coordinates"])
 ```
 
-Coordinate transformation:
+### Leveling network
 
 ```python
-from pysurveying.transform import transform_coordinates
+from pysurveying import LevelObservation, leveling_network
+
+observations = [
+    LevelObservation("BM", "A", 1.002, sigma=0.001),
+    LevelObservation("A", "B", 0.500, sigma=0.001),
+    LevelObservation("BM", "B", 1.503, sigma=0.001),
+]
+
+result = leveling_network(observations, {"BM": 10.000})
+print(result.metadata["adjusted_heights"])
+```
+
+### 2D control network
+
+```python
+import math
+from pysurveying import Observation, Point, adjust_control_network
+
+points = [
+    Point("A", 0.0, 0.0, fixed=True),
+    Point("B", 100.0, 0.0, fixed=True),
+    Point("C", 0.0, 100.0, fixed=True),
+    Point("P", 39.0, 31.0),
+]
+
+observations = [
+    Observation("distance", "A", "P", 50.0, sigma=0.01),
+    Observation("distance", "B", "P", math.hypot(60.0, 30.0), sigma=0.01),
+    Observation("distance", "C", "P", math.hypot(40.0, 70.0), sigma=0.01),
+]
+
+result = adjust_control_network(points, observations)
+print(result.metadata["adjusted_points"])
+```
+
+For Huber robust weighting, use `adjust_control_network_robust(...)`.
+
+### Coordinate transformation and ENU
+
+```python
+from pysurveying import geodetic_to_enu, transform_coordinates
 
 x, y = transform_coordinates(118.7969, 32.0603, "EPSG:4326", "EPSG:3857")
+
+e, n, u = geodetic_to_enu(
+    118.7970,
+    32.0604,
+    30.0,
+    118.7969,
+    32.0603,
+    25.0,
+)
 ```
 
 ## Package structure
 
 ```text
 src/pysurveying/
-├── models.py       # Point / Observation / AdjustmentResult
+├── models.py       # Point / observations / AdjustmentResult
 ├── basic.py        # angles, coordinates, intersections, resection
-├── traverse.py     # closed and connected traverse
-├── leveling.py     # leveling route adjustment
+├── traverse.py     # traverse and angular closure
+├── leveling.py     # leveling route and network
 ├── adjustment.py   # least squares and 2D control networks
-├── quality.py      # robust estimation, outliers, error ellipses
-├── transform.py    # CRS transformations
-├── engineering.py  # stakeout, offsets, slope, area
+├── quality.py      # robust estimation, data snooping, error ellipses
+├── transform.py    # CRS / ECEF / ENU transformations
+├── engineering.py  # stakeout, offsets, slopes, grade, area
 ├── io.py           # CSV / XLSX / LandXML / GSI
 ├── ui.py           # command entry point
 └── webapp.py       # Streamlit interface
@@ -113,14 +190,17 @@ src/pysurveying/
 ## Design rules
 
 1. Small functional API instead of a deep class hierarchy.
-2. Core algorithms are independent from the UI.
-3. Results expose residuals, covariance and precision information.
+2. Core algorithms remain independent from the UI.
+3. Adjustment results expose residuals, covariance and quality-control metadata.
 4. Existing numerical/geodetic libraries are reused when they already solve the low-level problem well.
-5. pySurveying does not try to replace GIS, GNSS processing, photogrammetry or point-cloud software.
+5. Instrument readers are separated from adjustment algorithms.
+6. pySurveying does not try to replace GIS, GNSS PPP/RTK processing, photogrammetry, SLAM or point-cloud software.
 
-## Current scope and limitations
+## Current limitations
 
-This is an early `0.1.x` implementation intended for common educational and engineering calculations. Instrument parsers are intentionally conservative, the control-network solver is aimed at small 2D networks, and free-network results are minimum-norm solutions tied to the supplied approximate coordinates. For production legal/metrology work, independently verify conventions, units and tolerances.
+The package is still an early implementation. The control-network solver is aimed at small 2D networks, free-network results are minimum-norm solutions tied to the supplied approximate coordinates, and the Leica GSI parser intentionally exposes conservative low-level records rather than pretending to support every instrument template. Robust covariance is approximate. The residual screen is practical standardized-residual screening rather than a complete multiple-testing implementation of Baarda data snooping.
+
+For production legal/metrology work, independently verify observation conventions, units, datum definitions and tolerance rules.
 
 ## License
 
