@@ -16,6 +16,16 @@ from pysurveying.quality import (
 def test_error_ellipse_axes():
     result = error_ellipse(np.diag([4.0, 1.0]), confidence=0.95)
     assert result["semi_major"] > result["semi_minor"] > 0
+    assert math.isclose(result["semi_major"] / result["semi_minor"], 2.0, rel_tol=1e-12)
+    assert math.isclose(result["azimuth"], 90.0, abs_tol=1e-12)
+    assert 0.0 <= result["azimuth"] < 180.0
+
+
+def test_error_ellipse_axis_uses_180_degree_equivalence():
+    covariance = np.array([[2.5, 1.5], [1.5, 2.5]])
+    result = error_ellipse(covariance, confidence=0.95)
+    assert 0.0 <= result["azimuth"] < 180.0
+    assert math.isclose(result["azimuth"], 45.0, abs_tol=1e-12)
 
 
 def test_huber_reduces_outlier_influence():
