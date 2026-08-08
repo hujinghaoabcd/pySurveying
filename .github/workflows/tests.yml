@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run install, tests, lint, and build
+      - name: Run and report diagnostics
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,17 +59,19 @@ jobs:
             build_code=${PIPESTATUS[0]}
           fi
 
-          echo "install=$install_code import=$import_code pytest=$test_code ruff=$ruff_code build=$build_code" | tee -a ci-diagnostic.log
+          summary="install=$install_code import=$import_code pytest=$test_code ruff=$ruff_code build=$build_code"
+          echo "$summary" | tee -a ci-diagnostic.log
+
+          body_file=$(mktemp)
+          {
+            echo "Automated CI diagnostic for commit $GITHUB_SHA."
+            echo
+            echo '```text'
+            tail -n 240 ci-diagnostic.log
+            echo '```'
+          } > "$body_file"
+          gh issue create --title "CI diagnostic: ${GITHUB_SHA::7}" --body-file "$body_file" || true
 
           if [ "$install_code" -ne 0 ] || [ "$import_code" -ne 0 ] || [ "$test_code" -ne 0 ] || [ "$ruff_code" -ne 0 ] || [ "$build_code" -ne 0 ]; then
-            body_file=$(mktemp)
-            {
-              echo "Automated CI diagnostic for commit $GITHUB_SHA."
-              echo
-              echo '```text'
-              tail -n 220 ci-diagnostic.log
-              echo '```'
-            } > "$body_file"
-            gh issue create --title "CI diagnostic: ${GITHUB_SHA::7}" --body-file "$body_file" || true
             exit 1
           fi
