@@ -1,0 +1,59 @@
+name: Feature request
+description: Propose a focused improvement that fits pySurveying's lightweight scope
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        pySurveying prioritizes a small, well-validated core. Please describe the surveying workflow/problem first, then the proposed API.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Surveying problem / workflow
+      description: What real calculation, adjustment, validation, or usability problem is missing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful behavior/API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example input and expected output
+      description: A small numerical example is strongly preferred.
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Reference / standard / prior implementation
+      description: Link or identify a textbook, paper, standard, or trusted implementation if relevant.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope estimate
+      options:
+        - Small extension to an existing function/module
+        - New focused helper within an existing module
+        - New compact module
+        - Large subsystem / ecosystem
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked docs/ROADMAP.md and this request fits or reasonably extends the stated scope.
+          required: true
+        - label: I can explain the coordinate/unit conventions needed by this feature.
+          required: true
