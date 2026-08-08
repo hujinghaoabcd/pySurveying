@@ -16,9 +16,13 @@ def _weight_matrix(weights: np.ndarray | Sequence[float] | None, n: int) -> np.n
     if array.ndim == 1:
         if array.size != n:
             raise ValueError("weight vector length must equal number of observations")
+        if np.any(array <= 0):
+            raise ValueError("observation weights must be positive")
         return np.diag(array)
     if array.shape != (n, n):
         raise ValueError("P must be an n×n matrix or an n-element weight vector")
+    if not np.allclose(array, array.T, atol=1e-12):
+        raise ValueError("P must be symmetric")
     return array
 
 
@@ -30,24 +34,36 @@ def least_squares(
     """Weighted linear least squares for ``A x ≈ L``.
 
     ``P`` may be omitted, supplied as an observation-weight vector, or supplied as
-    the full weight matrix. A Moore-Penrose inverse is used so rank-deficient
-    educational examples remain inspectable instead of failing with a matrix error.
+    the full weight matrix. The result metadata contains ``Qxx``, ``Qvv`` and
+    redundancy numbers so residual-based quality control can be performed without
+    rebuilding the normal equations.
     """
     A = np.asarray(A, dtype=float)
     L = np.asarray(L, dtype=float).reshape(-1)
     if A.ndim != 2 or A.shape[0] != L.size:
         raise ValueError("A rows must equal the number of observations in L")
+    if A.shape[1] == 0:
+        raise ValueError("A must contain at least one unknown parameter")
+    if not np.all(np.isfinite(A)) or not np.all(np.isfinite(L)):
+        raise ValueError("A and L must contain finite values")
 
     W = _weight_matrix(P, L.size)
     normal = A.T @ W @ A
     rhs = A.T @ W @ L
-    x = np.linalg.pinv(normal) @ rhs
+    qxx = np.linalg.pinv(normal)
+    x = qxx @ rhs
     v = A @ x - L
+
     rank = int(np.linalg.matrix_rank(A))
     dof = int(L.size - rank)
     sigma0 = float(math.sqrt((v @ W @ v) / dof)) if dof > 0 else None
-    qxx = np.linalg.pinv(normal)
     covariance = qxx if sigma0 is None else qxx * sigma0**2
+
+    qll = np.linalg.pinv(W)
+    qvv = qll - A @ qxx @ A.T
+    qvv = (qvv + qvv.T) / 2.0
+    redundancy = np.diag(qvv @ W)
+    redundancy = np.clip(redundancy, 0.0, 1.0)
 
     return AdjustmentResult(
         parameters=x,
@@ -55,7 +71,14 @@ def least_squares(
         sigma0=sigma0,
         covariance=covariance,
         dof=dof,
-        metadata={"rank": rank, "normal_matrix": normal},
+        metadata={
+            "rank": rank,
+            "normal_matrix": normal,
+            "weight_matrix": W,
+            "qxx": qxx,
+            "qvv": qvv,
+            "redundancy_numbers": redundancy,
+        },
     )
 
 
@@ -149,9 +172,7 @@ def adjust_control_network(
             minus = values.copy()
             plus[column] += step
             minus[column] -= step
-            jacobian[:, column] = (
-                residual_vector(plus) - residual_vector(minus)
-            ) / (2.0 * step)
+            jacobian[:, column] = (residual_vector(plus) - residual_vector(minus)) / (2.0 * step)
 
         correction = -np.linalg.pinv(jacobian) @ residuals
         values = values + correction
@@ -164,6 +185,7 @@ def adjust_control_network(
     dof = int(residuals.size - rank)
     sigma0 = float(math.sqrt((residuals @ residuals) / dof)) if dof > 0 else None
     covariance = None
+    qxx = None
     if jacobian is not None:
         qxx = np.linalg.pinv(jacobian.T @ jacobian)
         covariance = qxx if sigma0 is None else qxx * sigma0**2
@@ -188,6 +210,8 @@ def adjust_control_network(
             "adjusted_points": adjusted_points,
             "free_network": free_network,
             "rank": rank,
+            "qxx": qxx,
+            "residual_scale": "normalized_by_observation_sigma",
         },
     )
 
