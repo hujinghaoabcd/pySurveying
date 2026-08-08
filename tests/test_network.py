@@ -1,6 +1,10 @@
 import math
 
-from pysurveying.adjustment import adjust_control_network, adjust_control_network_robust
+from pysurveying.adjustment import (
+    adjust_control_network,
+    adjust_control_network_robust,
+    adjust_free_network,
+)
 from pysurveying.models import Observation, Point
 
 
@@ -72,3 +76,33 @@ def test_robust_network_reduces_outlier_effect():
     assert robust.converged
     assert robust_error < ordinary_error
     assert min(robust.metadata["robust_weights"]) < 1.0
+
+
+def test_free_network_preserves_observed_triangle_geometry():
+    points = [
+        Point("A", 2.0, -1.0),
+        Point("B", 98.0, 3.0),
+        Point("C", 42.0, 68.0),
+    ]
+    expected = {
+        ("A", "B"): 100.0,
+        ("A", "C"): math.hypot(40.0, 70.0),
+        ("B", "C"): math.hypot(60.0, 70.0),
+    }
+    observations = [
+        Observation("distance", start, end, value, sigma=0.01)
+        for (start, end), value in expected.items()
+    ]
+
+    result = adjust_free_network(points, observations)
+    adjusted = result.metadata["adjusted_points"]
+
+    assert result.converged
+    assert result.metadata["free_network"]
+    assert result.metadata["rank"] == 3
+    assert len(result.parameters) == 6
+    for (start, end), value in expected.items():
+        x1, y1 = adjusted[start]
+        x2, y2 = adjusted[end]
+        calculated = math.hypot(x2 - x1, y2 - y1)
+        assert math.isclose(calculated, value, abs_tol=1e-7)
