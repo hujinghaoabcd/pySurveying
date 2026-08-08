@@ -1,0 +1,4 @@
+from_point,to_point,height_difference,sigma
+BM,A,1.0000,0.0010
+A,B,2.0000,0.0020
+BM,B,3.0010,0.0015
