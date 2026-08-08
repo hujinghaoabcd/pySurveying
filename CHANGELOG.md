@@ -2,6 +2,19 @@
 
 All notable changes to pySurveying are recorded here.
 
+## 0.3.0
+
+- froze the current instrument-format and engineering-measurement scope instead of expanding into a larger surveying platform
+- added reusable CSV example datasets for control networks, leveling, traverses and 2D coordinate transformation
+- added regression tests that execute the shipped example datasets so documentation data cannot silently drift from the package API
+- added a runnable reference example for the independent and correlated parameter-adjustment cases from 宋力杰《测量平差程序设计》
+- added `docs/STANDARD_EXAMPLES.md` to separate source-backed numerical examples from transparent synthetic regression datasets
+- added a structured public API reference in `docs/API.md`
+- improved the Streamlit interface with a home page, built-in reference examples, control-network quality/precision output and downloadable result tables
+- expanded the README around installation, workflows, examples, documentation and project scope
+- added PyPI release documentation and a tag-triggered Trusted Publishing workflow
+- added package metadata/README validation with `twine check` in CI
+
 ## 0.2.1
 
 - added final-linearization `Qvv` and observation redundancy numbers for nonlinear 2D control networks
