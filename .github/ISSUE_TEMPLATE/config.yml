@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation and FAQ
+    url: https://github.com/hujinghaoabcd/pySurveying/blob/main/docs/FAQ.md
+    about: Check common conventions, limitations, and troubleshooting before opening an issue.
+  - name: Security policy
+    url: https://github.com/hujinghaoabcd/pySurveying/blob/main/SECURITY.md
+    about: Do not disclose exploit details in a public issue.
