@@ -89,11 +89,28 @@ Observation residuals are internally divided by the supplied standard deviation 
 
 ## 7. Robust adjustment and gross-error screening
 
-`robust_least_squares` uses a Huber loss for a linear model.
+The package now exposes both a compact SciPy Huber solver and the equivalent-weight workflow common in surveying adjustment texts.
 
-`adjust_control_network_robust` applies Huber iteratively reweighted least squares to normalized control-network residuals.
+`equivalent_weight_factor` implements the three piecewise functions used by the robust-adjustment workflow:
 
-`data_snooping` reports residual, standardized residual, redundancy number, and a threshold flag. It is a practical residual-screening tool. It does not claim to implement the complete multiple-testing decision framework of classical Baarda data snooping.
+- Huber: full weight inside `k0`, then `k0 / |v|`
+- IGG1: full weight inside `k0`, reduced weight between `k0` and `k1`, zero weight at and beyond `k1`
+- IGG3: full weight inside `k0`, smoothly tapered weight between `k0` and `k1`, zero weight at and beyond `k1`
+
+`robust_least_squares_irls` first performs ordinary least squares, obtains residual standard deviations from `sigma0 * sqrt(diag(Qvv))`, standardizes the residuals, converts them to equivalent weights, and repeats weighted least squares until the parameters stabilize.
+
+`data_snooping` is the one-pass inspection table. `iterative_data_snooping` follows the classical gross-error search sequence:
+
+```text
+least squares
+-> standardized residuals
+-> find the largest |standardized residual|
+-> remove it when it exceeds the threshold
+-> re-adjust
+-> repeat
+```
+
+The threshold is deliberately caller-controlled. These routines implement the computational screening workflow; they do not claim to provide a complete multiple-testing decision design for every Baarda-style application.
 
 ## 8. Error ellipses
 
