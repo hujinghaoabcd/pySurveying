@@ -156,6 +156,10 @@ def adjust_control_network(
       ``to_point`` the backsight and ``target2`` the foresight.
 
     All residuals are internally normalized by the observation standard deviation.
+    The final linearized model also returns ``Qxx``, ``Qvv`` and observation
+    redundancy numbers so control-network residuals can be screened consistently
+    with the linear adjustment utilities.
+
     Set ``robust=True`` to apply Huber IRLS weights to the normalized residuals.
     For a free network, a minimum-norm pseudoinverse solution is used and the supplied
     approximate coordinates define the practical datum realization.
@@ -183,18 +187,23 @@ def adjust_control_network(
     orientation_stations = sorted(
         {obs.from_point for obs in observations if obs.kind.lower() == "direction"}
     )
-    orientation_values = _initial_orientations(
-        point_map,
-        coordinate_names,
-        coordinate_values,
-        observations,
-        orientation_stations,
-    ) if orientation_stations else np.empty(0, dtype=float)
+    orientation_values = (
+        _initial_orientations(
+            point_map,
+            coordinate_names,
+            coordinate_values,
+            observations,
+            orientation_stations,
+        )
+        if orientation_stations
+        else np.empty(0, dtype=float)
+    )
     coordinate_parameter_count = coordinate_values.size
     values = np.concatenate((coordinate_values, orientation_values))
     n_parameters = values.size
     orientation_index = {
-        name: coordinate_parameter_count + index for index, name in enumerate(orientation_stations)
+        name: coordinate_parameter_count + index
+        for index, name in enumerate(orientation_stations)
     }
 
     def residual_vector(current: np.ndarray) -> np.ndarray:
@@ -221,45 +230,66 @@ def adjust_control_network(
                 raise ValueError(f"unsupported observation kind: {obs.kind}")
         return np.asarray(rows, dtype=float)
 
+    def numerical_jacobian(current: np.ndarray) -> np.ndarray:
+        base = residual_vector(current)
+        matrix = np.empty((base.size, n_parameters), dtype=float)
+        for column in range(n_parameters):
+            step = 1e-5 if column < coordinate_parameter_count else 1e-6
+            plus = current.copy()
+            minus = current.copy()
+            plus[column] += step
+            minus[column] -= step
+            matrix[:, column] = (residual_vector(plus) - residual_vector(minus)) / (
+                2.0 * step
+            )
+        return matrix
+
     converged = False
-    jacobian: np.ndarray | None = None
     final_weights = np.ones(len(observations), dtype=float)
     iteration = 0
     for iteration in range(1, max_iterations + 1):
         residuals = residual_vector(values)
-        jacobian = np.empty((residuals.size, n_parameters), dtype=float)
-        for column in range(n_parameters):
-            step = 1e-5 if column < coordinate_parameter_count else 1e-6
-            plus = values.copy()
-            minus = values.copy()
-            plus[column] += step
-            minus[column] -= step
-            jacobian[:, column] = (residual_vector(plus) - residual_vector(minus)) / (2.0 * step)
-
-        final_weights = _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
+        jacobian = numerical_jacobian(values)
+        final_weights = (
+            _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
+        )
         sqrt_w = np.sqrt(final_weights)
         weighted_jacobian = jacobian * sqrt_w[:, None]
         weighted_residuals = residuals * sqrt_w
         correction = -np.linalg.pinv(weighted_jacobian) @ weighted_residuals
         values = values + correction
         if orientation_stations:
-            values[coordinate_parameter_count:] = np.mod(values[coordinate_parameter_count:], 360.0)
+            values[coordinate_parameter_count:] = np.mod(
+                values[coordinate_parameter_count:], 360.0
+            )
         if float(np.max(np.abs(correction))) < tolerance:
             converged = True
             break
 
     residuals = residual_vector(values)
-    final_weights = _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
-    rank = int(np.linalg.matrix_rank(jacobian)) if jacobian is not None else 0
+    jacobian = numerical_jacobian(values)
+    final_weights = (
+        _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
+    )
+    sqrt_w = np.sqrt(final_weights)
+    weighted_jacobian = jacobian * sqrt_w[:, None]
+    rank = int(np.linalg.matrix_rank(weighted_jacobian))
     dof = int(residuals.size - rank)
     weighted_ss = float(np.sum(final_weights * residuals**2))
     sigma0 = float(math.sqrt(weighted_ss / dof)) if dof > 0 else None
-    covariance = None
-    qxx = None
-    if jacobian is not None:
-        normal = jacobian.T @ (final_weights[:, None] * jacobian)
-        qxx = np.linalg.pinv(normal)
-        covariance = qxx if sigma0 is None else qxx * sigma0**2
+
+    weight_matrix = np.diag(final_weights)
+    normal = jacobian.T @ weight_matrix @ jacobian
+    qxx = np.linalg.pinv(normal)
+    covariance = qxx if sigma0 is None else qxx * sigma0**2
+    qll = np.linalg.pinv(weight_matrix)
+    qvv = qll - jacobian @ qxx @ jacobian.T
+    qvv = (qvv + qvv.T) / 2.0
+    redundancy = np.diag(qvv @ weight_matrix)
+    redundancy = np.clip(redundancy, 0.0, 1.0)
+
+    sigmas = np.asarray([obs.sigma for obs in observations], dtype=float)
+    raw_residuals = residuals * sigmas
 
     adjusted_points: dict[str, tuple[float, float]] = {}
     for point in point_map.values():
@@ -274,7 +304,8 @@ def adjust_control_network(
             )
 
     adjusted_orientations = {
-        name: normalize_angle(float(values[index])) for name, index in orientation_index.items()
+        name: normalize_angle(float(values[index]))
+        for name, index in orientation_index.items()
     }
 
     return AdjustmentResult(
@@ -296,8 +327,19 @@ def adjust_control_network(
             "huber_k": huber_k,
             "robust_weights": final_weights,
             "rank": rank,
+            "normal_matrix": normal,
+            "weight_matrix": weight_matrix,
             "qxx": qxx,
+            "qvv": qvv,
+            "redundancy_numbers": redundancy,
+            "raw_residuals": raw_residuals,
+            "observation_sigmas": sigmas,
+            "observation_kinds": [obs.kind.lower() for obs in observations],
             "residual_scale": "normalized_by_observation_sigma",
+            "quality_note": (
+                "Qvv and redundancy are from the final local linearization; "
+                "robust results use final equivalent weights."
+            ),
         },
     )
 
