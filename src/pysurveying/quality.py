@@ -407,7 +407,11 @@ def iterative_data_snooping(
 def error_ellipse(
     covariance_2x2: np.ndarray, confidence: float = 0.95
 ) -> dict[str, float]:
-    """Return semi-major/minor axes and surveying azimuth of a 2D error ellipse."""
+    """Return axes and undirected surveying azimuth of a 2D error ellipse.
+
+    Because an ellipse axis has no arrow direction, the reported major-axis azimuth
+    is normalized to the surveying interval ``[0, 180)`` degrees.
+    """
     covariance = np.asarray(covariance_2x2, dtype=float)
     if covariance.shape != (2, 2):
         raise ValueError("covariance_2x2 must be 2×2")
@@ -424,7 +428,7 @@ def error_ellipse(
     semi_major = float(scale * math.sqrt(eigenvalues[0]))
     semi_minor = float(scale * math.sqrt(eigenvalues[1]))
     vx, vy = eigenvectors[:, 0]
-    theta = float(math.degrees(math.atan2(vx, vy)) % 360.0)
+    theta = float(math.degrees(math.atan2(vx, vy)) % 180.0)
     return {
         "semi_major": semi_major,
         "semi_minor": semi_minor,
