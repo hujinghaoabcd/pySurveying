@@ -6,7 +6,7 @@ A lightweight Python toolkit for surveying computation, least-squares adjustment
 
 ## Current version
 
-**0.2.0**
+**0.2.1**
 
 pySurveying deliberately stays small. It is intended for common surveying calculations, teaching examples, engineering data checks, and small control-network adjustment rather than as a replacement for a full geodetic production system.
 
@@ -19,9 +19,10 @@ pySurveying deliberately stays small. It is intended for common surveying calcul
 - angular-closure adjustment and closed traverse from measured interior angles
 - leveling-route adjustment
 - weighted least-squares leveling-network adjustment
-- weighted linear least-squares adjustment
+- weighted linear least-squares adjustment, including full correlated weight matrices
 - small 2D control-network adjustment using distance, direction/azimuth and angle observations
 - final-linearization `Qxx`, `Qvv`, redundancy numbers and per-observation quality tables for 2D control networks
+- per-point coordinate standard deviations, positional standard deviation and confidence error ellipses
 - iterative control-network gross-error localization with original observation indices preserved
 - minimum-norm 2D free-network adjustment
 - Huber robust linear adjustment
@@ -36,7 +37,7 @@ pySurveying deliberately stays small. It is intended for common surveying calcul
 - Excel adjustment export including residual-quality diagnostics when available
 - lightweight Streamlit interface
 
-The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, while NumPy/SciPy are used for numerical linear algebra instead of reimplementing low-level matrix routines.
+The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, while NumPy/SciPy are used for numerical linear algebra instead of reimplementing low-level matrix routines. The test suite includes exact numerical regressions for the book's independent and correlated parameter-adjustment examples.
 
 ## Coordinate and angle conventions
 
@@ -101,6 +102,8 @@ print(result.sigma0)
 print(data_snooping(result))
 ```
 
+`P` can be either a positive observation-weight vector or a full symmetric correlated weight matrix.
+
 ### Closed traverse from measured angles
 
 ```python
@@ -140,6 +143,7 @@ from pysurveying import (
     Observation,
     Point,
     adjust_control_network,
+    control_network_precision,
     control_network_quality,
 )
 
@@ -159,6 +163,7 @@ observations = [
 result = adjust_control_network(points, observations)
 print(result.metadata["adjusted_points"])
 print(control_network_quality(result, observations))
+print(control_network_precision(result))
 ```
 
 For Huber robust weighting, use `adjust_control_network_robust(...)`. For repeated standardized-residual screening and re-adjustment, use `control_network_data_snooping(...)`. The latter is a practical computational gross-error search; the threshold remains the caller's statistical/design choice.
@@ -192,6 +197,7 @@ src/pysurveying/
 ├── leveling.py     # leveling route and network
 ├── adjustment.py   # least squares and 2D control networks
 ├── quality.py      # robust estimation, network quality, data snooping, ellipses
+├── precision.py    # point standard deviations and control-network ellipses
 ├── transform.py    # CRS / ECEF / ENU transformations
 ├── engineering.py  # stakeout, offsets, slopes, grade, area
 ├── io.py           # CSV / XLSX / LandXML / GSI and result export
