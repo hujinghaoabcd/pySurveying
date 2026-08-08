@@ -27,10 +27,11 @@ The test suite currently checks:
 7. A distance-only free triangle has the expected three-dimensional observable rank and reproduces all three observed side lengths after minimum-norm adjustment.
 8. A redundant nonlinear distance control network exposes final-linearization `Qvv` and redundancy numbers whose sum agrees with the residual degrees of freedom.
 9. `control_network_quality` maps those diagnostics back to individual observations and preserves residuals in both normalized and original observation units.
-10. A synthetic ten-control-point distance network with one deliberately contaminated distance is re-adjusted iteratively and localizes the original gross observation index before recovering the unknown point close to its uncontaminated location.
-11. Adjustment-result table/Excel export preserves quality metadata such as raw residuals, standardized residuals, redundancy numbers and robust weights when those quantities are available.
+10. A mixed distance/azimuth/angle network verifies that linear residuals and angular residuals remain distinguishable in the per-observation quality report, and that the redundancy sum agrees with the residual degrees of freedom.
+11. A synthetic ten-control-point distance network with one deliberately contaminated distance is re-adjusted iteratively and localizes the original gross observation index before recovering the unknown point close to its uncontaminated location.
+12. Adjustment-result table/Excel export preserves quality metadata such as raw residuals, standardized residuals, redundancy numbers and robust weights when those quantities are available.
 
-The latest diagnostic run for this validation cycle completed package installation, import, UI/example compilation, pytest, Ruff and package build successfully, with 44 tests passing.
+The latest diagnostic run for this validation cycle completed package installation, import, UI/example compilation, pytest, Ruff and package build successfully, with 45 tests passing.
 
 ## Important statistical scope
 
@@ -48,7 +49,7 @@ The next validation targets are:
 
 - published traverse examples with angular and coordinate closure
 - leveling-network examples with unequal weights
-- mixed distance/direction/angle control-network reference examples
+- independently published mixed distance/direction/angle control-network reference examples
 - gross-error localization tests involving angular observations as well as distances
 - independent free-network datum checks beyond the current distance-triangle regression
 - error-ellipse values against independent surveying software
