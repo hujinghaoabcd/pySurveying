@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from .basic import azimuth, distance
+from .basic import azimuth, distance, normalize_angle
 from .models import AdjustmentResult, Observation, Point
 
 
@@ -86,7 +86,7 @@ def _unknown_names(points: Mapping[str, Point]) -> list[str]:
     return [name for name, point in points.items() if not point.fixed]
 
 
-def _pack(points: Mapping[str, Point], names: Sequence[str]) -> np.ndarray:
+def _pack_coordinates(points: Mapping[str, Point], names: Sequence[str]) -> np.ndarray:
     return np.array([value for name in names for value in (points[name].x, points[name].y)])
 
 
@@ -113,6 +113,27 @@ def _huber_weights(residuals: np.ndarray, k: float) -> np.ndarray:
     return weights
 
 
+def _initial_orientations(
+    point_map: Mapping[str, Point],
+    coordinate_names: Sequence[str],
+    coordinate_values: np.ndarray,
+    observations: Sequence[Observation],
+    stations: Sequence[str],
+) -> np.ndarray:
+    estimates: list[float] = []
+    for station_name in stations:
+        station_observations = [
+            obs
+            for obs in observations
+            if obs.kind.lower() == "direction" and obs.from_point == station_name
+        ]
+        obs = station_observations[0]
+        station = _point_xy(point_map, coordinate_names, coordinate_values, obs.from_point)
+        target = _point_xy(point_map, coordinate_names, coordinate_values, obs.to_point)
+        estimates.append(normalize_angle(azimuth(station, target) - obs.value))
+    return np.asarray(estimates, dtype=float)
+
+
 def adjust_control_network(
     points: Sequence[Point],
     observations: Sequence[Observation],
@@ -128,8 +149,10 @@ def adjust_control_network(
     Supported observation kinds:
 
     - ``distance``: value and sigma use coordinate-distance units.
-    - ``direction``/``azimuth``: value and sigma use degrees.
-    - ``angle``: value and sigma use degrees; ``from_point`` is the station,
+    - ``azimuth``: absolute surveying azimuth in degrees.
+    - ``direction``: circle direction in degrees; one station-orientation unknown is
+      introduced automatically for each station containing direction observations.
+    - ``angle``: horizontal angle in degrees; ``from_point`` is the station,
       ``to_point`` the backsight and ``target2`` the foresight.
 
     All residuals are internally normalized by the observation standard deviation.
@@ -138,8 +161,8 @@ def adjust_control_network(
     approximate coordinates define the practical datum realization.
     """
     point_map = {p.name: Point(p.name, p.x, p.y, p.z, p.fixed) for p in points}
-    names = _unknown_names(point_map)
-    if not names:
+    coordinate_names = _unknown_names(point_map)
+    if not coordinate_names:
         raise ValueError("network has no unknown points")
     if not observations:
         raise ValueError("network has no observations")
@@ -150,26 +173,50 @@ def adjust_control_network(
     if huber_k <= 0:
         raise ValueError("huber_k must be positive")
 
-    values = _pack(point_map, names)
+    for obs in observations:
+        if obs.from_point not in point_map or obs.to_point not in point_map:
+            raise KeyError(f"observation references unknown point: {obs.from_point}->{obs.to_point}")
+        if obs.target2 is not None and obs.target2 not in point_map:
+            raise KeyError(f"observation references unknown target2: {obs.target2}")
+
+    coordinate_values = _pack_coordinates(point_map, coordinate_names)
+    orientation_stations = sorted(
+        {obs.from_point for obs in observations if obs.kind.lower() == "direction"}
+    )
+    orientation_values = _initial_orientations(
+        point_map,
+        coordinate_names,
+        coordinate_values,
+        observations,
+        orientation_stations,
+    ) if orientation_stations else np.empty(0, dtype=float)
+    coordinate_parameter_count = coordinate_values.size
+    values = np.concatenate((coordinate_values, orientation_values))
     n_parameters = values.size
+    orientation_index = {
+        name: coordinate_parameter_count + index for index, name in enumerate(orientation_stations)
+    }
 
     def residual_vector(current: np.ndarray) -> np.ndarray:
         rows: list[float] = []
         for obs in observations:
-            station = _point_xy(point_map, names, current, obs.from_point)
-            target = _point_xy(point_map, names, current, obs.to_point)
+            station = _point_xy(point_map, coordinate_names, current, obs.from_point)
+            target = _point_xy(point_map, coordinate_names, current, obs.to_point)
             kind = obs.kind.lower()
             if kind == "distance":
                 rows.append((distance(station, target) - obs.value) / obs.sigma)
-            elif kind in {"direction", "azimuth"}:
-                diff = _angle_difference(azimuth(station, target), obs.value)
-                rows.append(diff / obs.sigma)
+            elif kind == "azimuth":
+                rows.append(_angle_difference(azimuth(station, target), obs.value) / obs.sigma)
+            elif kind == "direction":
+                orientation = current[orientation_index[obs.from_point]]
+                calculated = normalize_angle(azimuth(station, target) - orientation)
+                rows.append(_angle_difference(calculated, obs.value) / obs.sigma)
             elif kind == "angle":
                 if obs.target2 is None:
                     raise ValueError("angle observation requires target2")
-                foresight = _point_xy(point_map, names, current, obs.target2)
-                calc = (azimuth(station, foresight) - azimuth(station, target)) % 360.0
-                rows.append(_angle_difference(calc, obs.value) / obs.sigma)
+                foresight = _point_xy(point_map, coordinate_names, current, obs.target2)
+                calculated = (azimuth(station, foresight) - azimuth(station, target)) % 360.0
+                rows.append(_angle_difference(calculated, obs.value) / obs.sigma)
             else:
                 raise ValueError(f"unsupported observation kind: {obs.kind}")
         return np.asarray(rows, dtype=float)
@@ -181,8 +228,8 @@ def adjust_control_network(
     for iteration in range(1, max_iterations + 1):
         residuals = residual_vector(values)
         jacobian = np.empty((residuals.size, n_parameters), dtype=float)
-        step = 1e-5
         for column in range(n_parameters):
+            step = 1e-5 if column < coordinate_parameter_count else 1e-6
             plus = values.copy()
             minus = values.copy()
             plus[column] += step
@@ -195,6 +242,8 @@ def adjust_control_network(
         weighted_residuals = residuals * sqrt_w
         correction = -np.linalg.pinv(weighted_jacobian) @ weighted_residuals
         values = values + correction
+        if orientation_stations:
+            values[coordinate_parameter_count:] = np.mod(values[coordinate_parameter_count:], 360.0)
         if float(np.max(np.abs(correction))) < tolerance:
             converged = True
             break
@@ -217,7 +266,16 @@ def adjust_control_network(
         if point.fixed:
             adjusted_points[point.name] = (point.x, point.y)
         else:
-            adjusted_points[point.name] = _point_xy(point_map, names, values, point.name)
+            adjusted_points[point.name] = _point_xy(
+                point_map,
+                coordinate_names,
+                values,
+                point.name,
+            )
+
+    adjusted_orientations = {
+        name: normalize_angle(float(values[index])) for name, index in orientation_index.items()
+    }
 
     return AdjustmentResult(
         parameters=values,
@@ -228,7 +286,10 @@ def adjust_control_network(
         converged=converged,
         iterations=iteration,
         metadata={
-            "point_order": names,
+            "point_order": coordinate_names,
+            "coordinate_parameter_count": coordinate_parameter_count,
+            "orientation_order": orientation_stations,
+            "orientations": adjusted_orientations,
             "adjusted_points": adjusted_points,
             "free_network": free_network,
             "robust": robust,
