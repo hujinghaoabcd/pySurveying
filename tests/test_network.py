@@ -7,6 +7,7 @@ from pysurveying.adjustment import (
     adjust_control_network_robust,
     adjust_free_network,
 )
+from pysurveying.basic import azimuth
 from pysurveying.models import Observation, Point
 from pysurveying.quality import control_network_data_snooping, control_network_quality
 
@@ -138,6 +139,35 @@ def test_control_network_exposes_qvv_and_redundancy():
     assert len(rows) == 4
     assert all(row["kind"] == "distance" for row in rows)
     assert all("standardized_residual" in row for row in rows)
+
+
+def test_mixed_network_quality_preserves_angular_and_linear_units():
+    true_p = (40.0, 30.0)
+    points = [
+        Point("A", 0.0, 0.0, fixed=True),
+        Point("B", 100.0, 0.0, fixed=True),
+        Point("C", 0.0, 100.0, fixed=True),
+        Point("P", 39.5, 30.5),
+    ]
+    angle_at_a = (azimuth((0.0, 0.0), true_p) - azimuth((0.0, 0.0), (100.0, 0.0))) % 360.0
+    observations = [
+        Observation("distance", "A", "P", 50.01, sigma=0.02),
+        Observation("distance", "B", "P", math.hypot(60.0, 30.0) - 0.01, sigma=0.02),
+        Observation("azimuth", "C", "P", azimuth((0.0, 100.0), true_p) + 0.001, sigma=0.002),
+        Observation("azimuth", "B", "P", azimuth((100.0, 0.0), true_p) - 0.001, sigma=0.002),
+        Observation("angle", "A", "B", angle_at_a + 0.0015, sigma=0.003, target2="P"),
+    ]
+
+    result = adjust_control_network(points, observations)
+    rows = control_network_quality(result, observations, threshold=3.0)
+    redundancy = np.asarray(result.metadata["redundancy_numbers"])
+
+    assert result.converged
+    assert result.dof == 3
+    assert math.isclose(float(redundancy.sum()), 3.0, rel_tol=1e-5, abs_tol=1e-5)
+    assert [row["residual_unit"] for row in rows[:2]] == ["coordinate", "coordinate"]
+    assert [row["residual_unit"] for row in rows[2:]] == ["deg", "deg", "deg"]
+    assert all(np.isfinite(float(row["standardized_residual"])) for row in rows)
 
 
 def test_control_network_data_snooping_locates_gross_distance():
