@@ -24,6 +24,28 @@ def test_distance_control_network():
     assert math.isclose(y, 30.0, abs_tol=1e-6)
 
 
+def test_direction_set_solves_station_orientation():
+    points = [
+        Point("A", 0.0, 0.0, fixed=True),
+        Point("B", 0.0, 100.0, fixed=True),
+        Point("P", 48.0, 52.0),
+    ]
+    observations = [
+        Observation("direction", "A", "B", 10.0, sigma=0.001),
+        Observation("direction", "A", "P", 55.0, sigma=0.001),
+        Observation("distance", "A", "P", math.hypot(50.0, 50.0), sigma=0.01),
+    ]
+
+    result = adjust_control_network(points, observations)
+    x, y = result.metadata["adjusted_points"]["P"]
+    orientation = result.metadata["orientations"]["A"]
+
+    assert result.converged
+    assert math.isclose(x, 50.0, abs_tol=1e-5)
+    assert math.isclose(y, 50.0, abs_tol=1e-5)
+    assert math.isclose(orientation, 350.0, abs_tol=1e-5)
+
+
 def test_robust_network_reduces_outlier_effect():
     points = [
         Point("A", 0.0, 0.0, fixed=True),
