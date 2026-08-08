@@ -4,25 +4,25 @@ A lightweight Python toolkit for surveying computation, least-squares adjustment
 
 > 轻量级 Python 测量计算、测量平差与可视化工具包。
 
-## Scope
+## What it does
 
-pySurveying focuses on common surveying workflows without becoming a large GIS framework:
+pySurveying deliberately stays small. It focuses on the common calculations that surveying students and engineers repeatedly need:
 
-- basic surveying calculations: distance, azimuth, forward/inverse coordinate computation
-- traverse adjustment: closed and connected traverses
-- leveling route adjustment
-- forward intersection, distance intersection, and resection
+- distance, azimuth and coordinate forward/inverse calculation
+- forward intersection, distance intersection and resection
+- closed and connected traverse adjustment
+- leveling-route adjustment
 - weighted least-squares adjustment
-- 2D control-network adjustment
-- free-network adjustment
-- robust adjustment and gross-error detection
-- error ellipses
+- small 2D control-network adjustment using distance, direction and angle observations
+- free-network minimum-norm adjustment
+- Huber robust adjustment and residual-based gross-error screening
+- 2D error ellipses
 - CRS coordinate transformation via `pyproj`
-- common engineering-survey calculations
-- CSV / Excel / LandXML / Leica GSI input helpers
-- a lightweight Streamlit user interface
+- stakeout, offset, slope and polygon-area calculations
+- CSV, Excel, LandXML point and Leica GSI word import helpers
+- a lightweight Streamlit interface
 
-The numerical core follows the classical surveying-adjustment workflow used in *测量平差程序设计* while relying on NumPy/SciPy for modern numerical linear algebra.
+The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, but NumPy/SciPy are used for modern numerical linear algebra instead of reimplementing low-level matrix routines.
 
 ## Install
 
@@ -30,24 +30,25 @@ The numerical core follows the classical surveying-adjustment workflow used in *
 pip install -e .
 ```
 
-For the visual interface:
+Visual interface:
 
 ```bash
 pip install -e ".[ui]"
 pysurveying-ui
 ```
 
-For development:
+Development:
 
 ```bash
 pip install -e ".[dev,ui]"
 pytest
+ruff check src tests
 ```
 
 ## Quick start
 
 ```python
-from pysurveying import Point, distance, azimuth, forward_coordinate
+from pysurveying import Point, azimuth, distance, forward_coordinate
 
 p1 = Point("A", 1000.0, 1000.0)
 p2 = Point("B", 1100.0, 1050.0)
@@ -67,34 +68,59 @@ A = np.array([[1.0], [1.0], [1.0]])
 L = np.array([10.01, 9.99, 10.00])
 result = least_squares(A, L)
 print(result.parameters)
+print(result.residuals)
 print(result.sigma0)
 ```
 
-## Package layout
+Closed traverse:
+
+```python
+from pysurveying.traverse import closed_traverse
+
+result = closed_traverse(
+    start=(0.0, 0.0),
+    azimuths_deg=[90.0, 0.0, 270.0, 180.0],
+    distances=[100.0, 100.0, 100.0, 100.0],
+)
+print(result["coordinates"])
+```
+
+Coordinate transformation:
+
+```python
+from pysurveying.transform import transform_coordinates
+
+x, y = transform_coordinates(118.7969, 32.0603, "EPSG:4326", "EPSG:3857")
+```
+
+## Package structure
 
 ```text
 src/pysurveying/
-├── models.py       # common data structures
+├── models.py       # Point / Observation / AdjustmentResult
 ├── basic.py        # angles, coordinates, intersections, resection
-├── traverse.py     # traverse computations
+├── traverse.py     # closed and connected traverse
 ├── leveling.py     # leveling route adjustment
 ├── adjustment.py   # least squares and 2D control networks
-├── quality.py      # robust estimation, outliers, error ellipse
-├── transform.py    # CRS / geodetic transformations
+├── quality.py      # robust estimation, outliers, error ellipses
+├── transform.py    # CRS transformations
 ├── engineering.py  # stakeout, offsets, slope, area
-└── io.py           # tabular and instrument data import
+├── io.py           # CSV / XLSX / LandXML / GSI
+├── ui.py           # command entry point
+└── webapp.py       # Streamlit interface
 ```
 
-## Design principles
+## Design rules
 
-1. **Small API** — prefer functions and simple dataclasses over deep class hierarchies.
-2. **Transparent results** — adjustment functions return residuals, covariance and precision information.
-3. **Surveying first** — this package does not try to replace GIS, photogrammetry, GNSS processing or point-cloud libraries.
-4. **Testable mathematics** — core algorithms are independent from the UI.
+1. Small functional API instead of a deep class hierarchy.
+2. Core algorithms are independent from the UI.
+3. Results expose residuals, covariance and precision information.
+4. Existing numerical/geodetic libraries are reused when they already solve the low-level problem well.
+5. pySurveying does not try to replace GIS, GNSS processing, photogrammetry or point-cloud software.
 
-## Status
+## Current scope and limitations
 
-The project is under active initial development. The current main branch already contains a usable first implementation of the core toolkit and a lightweight Streamlit interface.
+This is an early `0.1.x` implementation intended for common educational and engineering calculations. Instrument parsers are intentionally conservative, the control-network solver is aimed at small 2D networks, and free-network results are minimum-norm solutions tied to the supplied approximate coordinates. For production legal/metrology work, independently verify conventions, units and tolerances.
 
 ## License
 
