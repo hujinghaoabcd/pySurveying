@@ -4,7 +4,10 @@ import pandas as pd
 from pysurveying.io import (
     adjustment_tables,
     export_adjustment_excel,
+    level_observations_from_dataframe,
     normalize_point_columns,
+    observations_from_dataframe,
+    points_from_dataframe,
     read_points,
     write_points,
 )
@@ -17,6 +20,57 @@ def test_normalize_point_columns():
     )
     normalized = normalize_point_columns(data)
     assert list(normalized[["name", "x", "y", "z"]].columns) == ["name", "x", "y", "z"]
+
+
+def test_points_from_dataframe_handles_aliases_and_fixed():
+    data = pd.DataFrame(
+        {
+            "点号": ["A", "P"],
+            "Easting": [100.0, 120.0],
+            "Northing": [200.0, 230.0],
+            "高程": [5.0, np.nan],
+            "已知": ["是", "否"],
+        }
+    )
+    points = points_from_dataframe(data)
+    assert points[0].name == "A"
+    assert points[0].fixed
+    assert points[0].z == 5.0
+    assert not points[1].fixed
+    assert points[1].z is None
+
+
+def test_observations_from_dataframe_aliases():
+    data = pd.DataFrame(
+        {
+            "观测类型": ["distance", "angle"],
+            "测站": ["A", "P"],
+            "照准点": ["P", "A"],
+            "前视点": ["", "B"],
+            "观测值": [50.0, 45.0],
+            "中误差": [0.01, 0.001],
+        }
+    )
+    observations = observations_from_dataframe(data)
+    assert observations[0].kind == "distance"
+    assert observations[0].target2 is None
+    assert observations[1].target2 == "B"
+    assert observations[1].sigma == 0.001
+
+
+def test_level_observations_from_dataframe_aliases():
+    data = pd.DataFrame(
+        {
+            "起点": ["BM", "A"],
+            "终点": ["A", "B"],
+            "高差": [1.0, 2.0],
+            "标准差": [0.001, 0.002],
+        }
+    )
+    observations = level_observations_from_dataframe(data)
+    assert observations[0].from_point == "BM"
+    assert observations[0].height_difference == 1.0
+    assert observations[1].sigma == 0.002
 
 
 def test_csv_point_roundtrip(tmp_path):
