@@ -8,7 +8,7 @@ import numpy as np
 
 @dataclass(slots=True)
 class Point:
-    """A surveying point using the common X/Y coordinate convention."""
+    """A surveying point using the package X/Y coordinate convention."""
 
     name: str
     x: float
@@ -35,6 +35,17 @@ class Observation:
     value: float
     sigma: float = 1.0
     target2: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class LevelObservation:
+    """Observed height difference ``H_to - H_from`` with standard deviation."""
+
+    from_point: str
+    to_point: str
+    height_difference: float
+    sigma: float = 1.0
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
