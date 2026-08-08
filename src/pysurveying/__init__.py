@@ -40,6 +40,7 @@ from .io import (
 )
 from .leveling import leveling_network, leveling_route
 from .models import AdjustmentResult, LevelObservation, Observation, Point
+from .precision import control_network_precision
 from .quality import (
     control_network_data_snooping,
     control_network_quality,
@@ -93,6 +94,7 @@ __all__ = [
     "closed_traverse_from_angles",
     "connected_traverse",
     "control_network_data_snooping",
+    "control_network_precision",
     "control_network_quality",
     "data_snooping",
     "degree_to_dms",
