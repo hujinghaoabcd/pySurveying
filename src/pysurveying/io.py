@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .models import AdjustmentResult
+from .models import AdjustmentResult, LevelObservation, Observation, Point
 
 
 def read_csv(path, **kwargs) -> pd.DataFrame:
@@ -25,6 +25,7 @@ def normalize_point_columns(data: pd.DataFrame) -> pd.DataFrame:
         "x": {"x", "e", "east", "easting", "横坐标"},
         "y": {"y", "n", "north", "northing", "纵坐标"},
         "z": {"z", "h", "height", "elevation", "高程"},
+        "fixed": {"fixed", "control", "known", "固定", "已知"},
     }
     rename: dict[str, str] = {}
     lower = {str(column).strip().lower(): column for column in data.columns}
@@ -35,6 +36,129 @@ def normalize_point_columns(data: pd.DataFrame) -> pd.DataFrame:
                 rename[lower[key]] = target
                 break
     return data.rename(columns=rename).copy()
+
+
+def _as_bool(value) -> bool:
+    if pd.isna(value):
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "fixed", "known", "是", "已知"}
+    return bool(value)
+
+
+def points_from_dataframe(data: pd.DataFrame) -> list[Point]:
+    """Convert a normalized or common point table into :class:`Point` objects."""
+    table = normalize_point_columns(data)
+    required = {"name", "x", "y"}
+    missing = required - set(table.columns)
+    if missing:
+        raise ValueError(f"point table is missing columns: {sorted(missing)}")
+
+    points: list[Point] = []
+    for _, row in table.iterrows():
+        z = None
+        if "z" in table.columns and pd.notna(row["z"]):
+            z = float(row["z"])
+        fixed = _as_bool(row["fixed"]) if "fixed" in table.columns else False
+        points.append(
+            Point(
+                name=str(row["name"]),
+                x=float(row["x"]),
+                y=float(row["y"]),
+                z=z,
+                fixed=fixed,
+            )
+        )
+    return points
+
+
+def observations_from_dataframe(data: pd.DataFrame) -> list[Observation]:
+    """Convert a control-network observation table into ``Observation`` objects.
+
+    Required columns are ``kind, from_point, to_point, value``. Optional columns are
+    ``sigma`` and ``target2``. This deliberately uses an explicit compact schema so
+    instrument-specific parsing remains separate from adjustment code.
+    """
+    table = data.copy()
+    aliases = {
+        "kind": {"kind", "type", "observation", "观测类型"},
+        "from_point": {"from_point", "from", "station", "测站", "起点"},
+        "to_point": {"to_point", "to", "target", "照准点", "终点"},
+        "target2": {"target2", "foresight", "前视", "前视点"},
+        "value": {"value", "observed", "measurement", "观测值"},
+        "sigma": {"sigma", "std", "stdev", "标准差", "中误差"},
+    }
+    lower = {str(column).strip().lower(): column for column in table.columns}
+    rename: dict[str, str] = {}
+    for target, candidates in aliases.items():
+        for candidate in candidates:
+            key = candidate.lower()
+            if key in lower:
+                rename[lower[key]] = target
+                break
+    table = table.rename(columns=rename)
+
+    required = {"kind", "from_point", "to_point", "value"}
+    missing = required - set(table.columns)
+    if missing:
+        raise ValueError(f"observation table is missing columns: {sorted(missing)}")
+
+    observations: list[Observation] = []
+    for _, row in table.iterrows():
+        target2 = None
+        if "target2" in table.columns and pd.notna(row["target2"]):
+            text = str(row["target2"]).strip()
+            target2 = text or None
+        sigma = float(row["sigma"]) if "sigma" in table.columns and pd.notna(row["sigma"]) else 1.0
+        observations.append(
+            Observation(
+                kind=str(row["kind"]).strip(),
+                from_point=str(row["from_point"]).strip(),
+                to_point=str(row["to_point"]).strip(),
+                value=float(row["value"]),
+                sigma=sigma,
+                target2=target2,
+            )
+        )
+    return observations
+
+
+def level_observations_from_dataframe(data: pd.DataFrame) -> list[LevelObservation]:
+    """Convert a leveling table into ``LevelObservation`` objects."""
+    table = data.copy()
+    aliases = {
+        "from_point": {"from_point", "from", "start", "后视点", "起点"},
+        "to_point": {"to_point", "to", "end", "前视点", "终点"},
+        "height_difference": {"height_difference", "dh", "delta_h", "高差"},
+        "sigma": {"sigma", "std", "stdev", "标准差", "中误差"},
+    }
+    lower = {str(column).strip().lower(): column for column in table.columns}
+    rename: dict[str, str] = {}
+    for target, candidates in aliases.items():
+        for candidate in candidates:
+            key = candidate.lower()
+            if key in lower:
+                rename[lower[key]] = target
+                break
+    table = table.rename(columns=rename)
+
+    required = {"from_point", "to_point", "height_difference"}
+    missing = required - set(table.columns)
+    if missing:
+        raise ValueError(f"leveling table is missing columns: {sorted(missing)}")
+
+    observations: list[LevelObservation] = []
+    for _, row in table.iterrows():
+        sigma = float(row["sigma"]) if "sigma" in table.columns and pd.notna(row["sigma"]) else 1.0
+        observations.append(
+            LevelObservation(
+                from_point=str(row["from_point"]).strip(),
+                to_point=str(row["to_point"]).strip(),
+                height_difference=float(row["height_difference"]),
+                sigma=sigma,
+            )
+        )
+    return observations
 
 
 def read_landxml_points(path: str | Path) -> pd.DataFrame:
