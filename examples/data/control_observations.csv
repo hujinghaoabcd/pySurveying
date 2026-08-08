@@ -1,0 +1,4 @@
+kind,from_point,to_point,target2,value,sigma
+distance,A,P,,50.0,0.01
+distance,B,P,,67.08203932499369,0.01
+distance,C,P,,80.62257748298549,0.01
