@@ -85,7 +85,7 @@ The compact control-network solver supports:
 
 Observation residuals are internally divided by the supplied standard deviation before iterative adjustment. The nonlinear Jacobian is computed numerically.
 
-`adjust_free_network` uses a minimum-norm realization tied to the supplied approximate coordinates. It is intended for small networks and teaching/engineering checks, not as a full datum-design package.
+`adjust_free_network` uses a minimum-norm realization tied to the supplied approximate coordinates. In a distance-only 2D network the familiar datum defects are two translations and one rotation; the absolute adjusted coordinates therefore depend on the supplied approximate datum, while observable internal geometry such as adjusted distances is the quantity to compare. It is intended for small networks and teaching/engineering checks, not as a full datum-design package.
 
 ## 7. Robust adjustment and gross-error screening
 
@@ -115,6 +115,8 @@ The threshold is deliberately caller-controlled. These routines implement the co
 ## 8. Error ellipses
 
 `error_ellipse` diagonalizes a 2×2 coordinate covariance matrix and scales the axes using the chi-square quantile for the requested confidence level. The default is a 95% confidence ellipse.
+
+The major-axis orientation is reported as a surveying azimuth measured clockwise from north. An ellipse axis is undirected, so azimuths that differ by 180° describe the same axis; pySurveying therefore normalizes the returned major-axis azimuth to `[0, 180)`.
 
 ## 9. Coordinate transformations
 
