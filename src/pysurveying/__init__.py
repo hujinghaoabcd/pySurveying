@@ -1,6 +1,11 @@
 """pySurveying: lightweight surveying computation and adjustment."""
 
-from .adjustment import adjust_control_network, adjust_free_network, least_squares
+from .adjustment import (
+    adjust_control_network,
+    adjust_control_network_robust,
+    adjust_free_network,
+    least_squares,
+)
 from .basic import (
     azimuth,
     degree_to_dms,
@@ -57,6 +62,7 @@ __all__ = [
     "Point",
     "adjust_angles",
     "adjust_control_network",
+    "adjust_control_network_robust",
     "adjust_free_network",
     "azimuth",
     "chainage_offset",
