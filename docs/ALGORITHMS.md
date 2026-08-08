@@ -85,11 +85,24 @@ The compact control-network solver supports:
 
 Observation residuals are internally divided by the supplied standard deviation before iterative adjustment. The nonlinear Jacobian is computed numerically.
 
+After convergence, the Jacobian is recomputed at the final parameters. In normalized observation space, pySurveying forms the local linearized quantities
+
+```text
+N   = Jᵀ P J
+Qxx = N⁻
+Qvv = Qll - J Qxx Jᵀ
+r_i = diag(Qvv P)_i
+```
+
+where ordinary adjustment has `P = I` because each observation equation has already been divided by its supplied sigma. For robust control-network adjustment, `P` contains the final Huber equivalent weights and the resulting covariance/quality quantities are local approximations.
+
+`control_network_quality` turns those matrices into one row per observation, including observation type, endpoints, raw residual in the observation's own unit, normalized residual, standardized residual, redundancy number, robust weight and a threshold flag.
+
 `adjust_free_network` uses a minimum-norm realization tied to the supplied approximate coordinates. In a distance-only 2D network the familiar datum defects are two translations and one rotation; the absolute adjusted coordinates therefore depend on the supplied approximate datum, while observable internal geometry such as adjusted distances is the quantity to compare. It is intended for small networks and teaching/engineering checks, not as a full datum-design package.
 
 ## 7. Robust adjustment and gross-error screening
 
-The package now exposes both a compact SciPy Huber solver and the equivalent-weight workflow common in surveying adjustment texts.
+The package exposes both a compact SciPy Huber solver and the equivalent-weight workflow common in surveying adjustment texts.
 
 `equivalent_weight_factor` implements the three piecewise functions used by the robust-adjustment workflow:
 
@@ -99,14 +112,24 @@ The package now exposes both a compact SciPy Huber solver and the equivalent-wei
 
 `robust_least_squares_irls` first performs ordinary least squares, obtains residual standard deviations from `sigma0 * sqrt(diag(Qvv))`, standardizes the residuals, converts them to equivalent weights, and repeats weighted least squares until the parameters stabilize.
 
-`data_snooping` is the one-pass inspection table. `iterative_data_snooping` follows the classical gross-error search sequence:
+For a general linear model, `data_snooping` is the one-pass inspection table and `iterative_data_snooping` repeats the adjustment after removing the largest standardized residual above the selected threshold.
+
+For a nonlinear 2D control network, the equivalent pair is:
 
 ```text
-least squares
+control_network_quality
+control_network_data_snooping
+```
+
+The latter preserves original observation indices and repeatedly performs:
+
+```text
+control-network adjustment
+-> final local Qvv
 -> standardized residuals
--> find the largest |standardized residual|
--> remove it when it exceeds the threshold
--> re-adjust
+-> find largest |standardized residual|
+-> remove when it exceeds the threshold
+-> rebuild and re-adjust
 -> repeat
 ```
 
