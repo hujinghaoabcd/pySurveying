@@ -122,6 +122,35 @@ def test_adjustment_tables_include_adjusted_points():
     assert tables["adjusted_points"].iloc[0]["name"] == "P"
 
 
+def test_adjustment_tables_include_quality_metadata():
+    result = AdjustmentResult(
+        parameters=np.array([1.0]),
+        residuals=np.array([0.5, -0.5]),
+        sigma0=1.0,
+        covariance=np.eye(1),
+        dof=1,
+        metadata={
+            "rank": 1,
+            "qvv": np.diag([0.25, 0.25]),
+            "redundancy_numbers": np.array([0.5, 0.5]),
+            "raw_residuals": np.array([0.01, -0.01]),
+            "observation_kinds": ["distance", "distance"],
+            "robust_weights": np.array([1.0, 0.8]),
+        },
+    )
+    tables = adjustment_tables(result)
+    residuals = tables["residuals"]
+    assert {
+        "residual_observation_unit",
+        "kind",
+        "redundancy",
+        "robust_weight",
+        "standardized_residual",
+    } <= set(residuals.columns)
+    assert np.allclose(residuals["standardized_residual"], [1.0, -1.0])
+    assert tables["summary"].iloc[0]["redundancy_sum"] == 1.0
+
+
 def test_export_adjustment_excel(tmp_path):
     result = AdjustmentResult(
         parameters=np.array([1.0]),
