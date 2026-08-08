@@ -8,6 +8,7 @@ This directory contains the project documentation used for the `0.3.0` public-re
 | --- | --- |
 | Install and run a first workflow | [`QUICKSTART.md`](QUICKSTART.md) |
 | Look up public functions | [`API.md`](API.md) |
+| Understand package structure | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Understand algorithms | [`ALGORITHMS.md`](ALGORITHMS.md) |
 | Use CSV/Excel/LandXML/GSI helpers | [`DATA_FORMATS.md`](DATA_FORMATS.md) |
 | Inspect source-backed/regression examples | [`STANDARD_EXAMPLES.md`](STANDARD_EXAMPLES.md) |
@@ -15,6 +16,7 @@ This directory contains the project documentation used for the `0.3.0` public-re
 | Resolve common questions | [`FAQ.md`](FAQ.md) |
 | See current scope and future direction | [`ROADMAP.md`](ROADMAP.md) |
 | Prepare TestPyPI/PyPI release | [`RELEASE.md`](RELEASE.md) |
+| Prepare repository presentation and public launch | [`LAUNCH.md`](LAUNCH.md) |
 
 ## Documentation principles
 
@@ -41,3 +43,8 @@ Repository-level documents include:
 - [`../CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md)
 - [`../CITATION.cff`](../CITATION.cff)
 - [`../CHANGELOG.md`](../CHANGELOG.md)
+
+## Language entry points
+
+- Main English README: [`../README.md`](../README.md)
+- 简体中文 README: [`../README_zh.md`](../README_zh.md)
