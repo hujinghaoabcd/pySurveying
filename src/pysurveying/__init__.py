@@ -41,6 +41,8 @@ from .io import (
 from .leveling import leveling_network, leveling_route
 from .models import AdjustmentResult, LevelObservation, Observation, Point
 from .quality import (
+    control_network_data_snooping,
+    control_network_quality,
     data_snooping,
     detect_outliers,
     equivalent_weight_factor,
@@ -90,6 +92,8 @@ __all__ = [
     "closed_traverse",
     "closed_traverse_from_angles",
     "connected_traverse",
+    "control_network_data_snooping",
+    "control_network_quality",
     "data_snooping",
     "degree_to_dms",
     "detect_outliers",
