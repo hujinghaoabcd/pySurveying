@@ -240,26 +240,59 @@ def write_points(data: pd.DataFrame, path: str | Path, **kwargs) -> Path:
 
 
 def adjustment_tables(result: AdjustmentResult) -> dict[str, pd.DataFrame]:
-    """Convert a generic adjustment result into export-friendly tables."""
+    """Convert an adjustment result into export-friendly tables.
+
+    When the result contains control-network quality metadata, the residual sheet
+    automatically includes raw residuals, standardized residuals, redundancy
+    numbers, observation kinds and final robust weights.
+    """
+    metadata = result.metadata or {}
     parameters = pd.DataFrame(
         {"index": np.arange(len(result.parameters)), "value": np.asarray(result.parameters)}
     )
-    residuals = pd.DataFrame(
-        {"index": np.arange(len(result.residuals)), "residual": np.asarray(result.residuals)}
-    )
-    summary = pd.DataFrame(
-        [
-            {
-                "sigma0": result.sigma0,
-                "dof": result.dof,
-                "converged": result.converged,
-                "iterations": result.iterations,
-            }
-        ]
-    )
+
+    residual_values = np.asarray(result.residuals, dtype=float)
+    residual_data: dict[str, object] = {
+        "index": np.arange(len(residual_values)),
+        "residual": residual_values,
+    }
+    raw_residuals = metadata.get("raw_residuals")
+    if raw_residuals is not None and len(raw_residuals) == len(residual_values):
+        residual_data["residual_observation_unit"] = np.asarray(raw_residuals, dtype=float)
+    observation_kinds = metadata.get("observation_kinds")
+    if observation_kinds is not None and len(observation_kinds) == len(residual_values):
+        residual_data["kind"] = list(observation_kinds)
+    redundancy = metadata.get("redundancy_numbers")
+    if redundancy is not None and len(redundancy) == len(residual_values):
+        residual_data["redundancy"] = np.asarray(redundancy, dtype=float)
+    robust_weights = metadata.get("robust_weights")
+    if robust_weights is not None and len(robust_weights) == len(residual_values):
+        residual_data["robust_weight"] = np.asarray(robust_weights, dtype=float)
+
+    qvv = metadata.get("qvv")
+    if qvv is not None and result.sigma0 is not None and result.sigma0 > 0:
+        qvv_array = np.asarray(qvv, dtype=float)
+        if qvv_array.shape == (len(residual_values), len(residual_values)):
+            scale = result.sigma0 * np.sqrt(np.maximum(np.diag(qvv_array), 0.0))
+            standardized = np.zeros_like(residual_values)
+            valid = scale > np.finfo(float).eps
+            standardized[valid] = residual_values[valid] / scale[valid]
+            residual_data["standardized_residual"] = standardized
+
+    residuals = pd.DataFrame(residual_data)
+    summary_row = {
+        "sigma0": result.sigma0,
+        "dof": result.dof,
+        "converged": result.converged,
+        "iterations": result.iterations,
+        "rank": metadata.get("rank"),
+    }
+    if redundancy is not None:
+        summary_row["redundancy_sum"] = float(np.sum(np.asarray(redundancy, dtype=float)))
+    summary = pd.DataFrame([summary_row])
     tables = {"summary": summary, "parameters": parameters, "residuals": residuals}
 
-    adjusted_points = result.metadata.get("adjusted_points") if result.metadata else None
+    adjusted_points = metadata.get("adjusted_points")
     if adjusted_points:
         tables["adjusted_points"] = pd.DataFrame(
             [
@@ -267,7 +300,7 @@ def adjustment_tables(result: AdjustmentResult) -> dict[str, pd.DataFrame]:
                 for name, coordinates in adjusted_points.items()
             ]
         )
-    adjusted_heights = result.metadata.get("adjusted_heights") if result.metadata else None
+    adjusted_heights = metadata.get("adjusted_heights")
     if adjusted_heights:
         tables["adjusted_heights"] = pd.DataFrame(
             [{"name": name, "height": value} for name, value in adjusted_heights.items()]
@@ -276,7 +309,7 @@ def adjustment_tables(result: AdjustmentResult) -> dict[str, pd.DataFrame]:
 
 
 def export_adjustment_excel(result: AdjustmentResult, path: str | Path) -> Path:
-    """Export adjustment summary, parameters, residuals and adjusted points/heights."""
+    """Export adjustment summary, parameters, residual diagnostics and adjusted values."""
     path = Path(path)
     if path.suffix.lower() != ".xlsx":
         raise ValueError("export path must end with .xlsx")
