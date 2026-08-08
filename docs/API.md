@@ -84,18 +84,18 @@ Bowditch adjustment of a geometrically closed traverse.
 ### `connected_traverse(start, end, azimuths_deg, distances)`
 Bowditch adjustment between two known endpoints.
 
-### `adjust_angles(angles_deg, theoretical_sum=None, weights=None)`
+### `adjust_angles(angles_deg, *, theoretical_sum=None, weights=None)`
 Distribute angular misclosure by weighted least squares. When `theoretical_sum` is omitted, `(n - 2) * 180°` is used.
 
 ### `traverse_azimuths_from_angles(start_azimuth_deg, interior_angles_deg, turn="right")`
 Propagate side azimuths from interior angles.
 
-### `closed_traverse_from_angles(start, start_azimuth_deg, interior_angles_deg, distances, turn="right", angle_weights=None)`
+### `closed_traverse_from_angles(start, start_azimuth_deg, interior_angles_deg, distances, *, turn="right", angle_weights=None)`
 Adjust polygon angles, derive side azimuths, then apply Bowditch coordinate correction.
 
 ## Leveling
 
-### `leveling_route(start_height, height_differences, end_height=None, lengths=None)`
+### `leveling_route(start_height, height_differences, *, end_height=None, lengths=None)`
 Adjust a closed or connected leveling route. Corrections are equal per section when lengths are omitted, otherwise proportional to section length.
 
 ### `leveling_network(observations, fixed_heights)`
@@ -114,12 +114,12 @@ Weighted linear least squares for `A x ≈ L`.
 
 The result includes `Qxx`, `Qvv`, redundancy numbers and posterior covariance.
 
-### `adjust_control_network(points, observations, max_iterations=20, tolerance=1e-7, free_network=False, robust=False, huber_k=1.5)`
+### `adjust_control_network(points, observations, *, max_iterations=20, tolerance=1e-7, free_network=False, robust=False, huber_k=1.5)`
 Iterative small 2D network adjustment supporting distance, azimuth, direction and horizontal-angle observations.
 
 Residuals stored in `result.residuals` are normalized by observation sigma. `result.metadata["raw_residuals"]` stores residuals in original observation units.
 
-### `adjust_control_network_robust(points, observations, huber_k=1.5, **kwargs)`
+### `adjust_control_network_robust(points, observations, *, huber_k=1.5, **kwargs)`
 Convenience wrapper for Huber robust control-network adjustment.
 
 ### `adjust_free_network(points, observations, **kwargs)`
@@ -139,51 +139,51 @@ Return indices whose absolute standardized residual reaches the threshold.
 ### `data_snooping(result, threshold=3.0)`
 Return a compact per-observation residual-screening table.
 
-### `iterative_data_snooping(A, L, P=None, threshold=3.0, max_removals=None)`
+### `iterative_data_snooping(A, L, P=None, *, threshold=3.0, max_removals=None)`
 Repeatedly remove the largest standardized residual above the threshold and re-adjust a linear model.
 
-### `control_network_quality(result, observations, threshold=3.0)`
+### `control_network_quality(result, observations, *, threshold=3.0)`
 Map final-linearization diagnostics back to control-network observations. Includes observation-unit residual, normalized residual, standardized residual, redundancy number, robust weight and flag.
 
-### `control_network_data_snooping(points, observations, threshold=3.0, max_removals=None, **adjustment_kwargs)`
+### `control_network_data_snooping(points, observations, *, threshold=3.0, max_removals=None, **adjustment_kwargs)`
 Repeated ordinary control-network adjustment and standardized-residual screening while preserving original observation indices.
 
-### `equivalent_weight_factor(value, method="huber", k0=1.5, k1=2.5)`
+### `equivalent_weight_factor(value, *, method="huber", k0=1.5, k1=2.5)`
 Single robust equivalent-weight factor. Methods: `huber`, `igg1`, `igg3`.
 
-### `equivalent_weight_factors(values, method="huber", k0=1.5, k1=2.5)`
+### `equivalent_weight_factors(values, *, method="huber", k0=1.5, k1=2.5)`
 Vectorized equivalent-weight factors.
 
 ### `robust_least_squares(A, L, f_scale=1.0)`
 Compact SciPy Huber-loss linear solver retained as a convenience API.
 
-### `robust_least_squares_irls(A, L, method="huber", k0=1.5, k1=2.5, max_iterations=50, tolerance=1e-10)`
+### `robust_least_squares_irls(A, L, *, method="huber", k0=1.5, k1=2.5, max_iterations=50, tolerance=1e-10)`
 Surveying-style equivalent-weight IRLS for Huber, IGG1 or IGG3 weighting.
 
 ### `error_ellipse(covariance_2x2, confidence=0.95)`
 Return confidence-ellipse semi-major axis, semi-minor axis and undirected surveying azimuth in `[0, 180)`.
 
-### `control_network_precision(result, confidence=0.95)`
+### `control_network_precision(result, *, confidence=0.95)`
 Return one precision row per adjusted point: `sigma_x`, `sigma_y`, `cov_xy`, positional standard deviation and confidence-ellipse values.
 
 ## Coordinate transformation
 
-### `transform_coordinates(x, y, source_crs, target_crs, always_xy=True)`
-CRS-to-CRS conversion through `pyproj`.
+### `transform_coordinates(x, y, from_crs, to_crs, *, always_xy=True)`
+CRS-to-CRS conversion through `pyproj`. Scalar or array-like `x`/`y` values are accepted.
 
-### `geodetic_to_ecef(lon, lat, height)` / `ecef_to_geodetic(x, y, z)`
+### `geodetic_to_ecef(lon, lat, height=0.0)` / `ecef_to_geodetic(x, y, z)`
 WGS84 geodetic and Earth-centered Earth-fixed conversions.
 
-### `ecef_to_enu(...)` / `enu_to_ecef(...)`
+### `ecef_to_enu(x, y, z, lon0, lat0, height0=0.0)` / `enu_to_ecef(east, north, up, lon0, lat0, height0=0.0)`
 ECEF and local East-North-Up conversion relative to a geodetic origin.
 
-### `geodetic_to_enu(...)` / `enu_to_geodetic(...)`
+### `geodetic_to_enu(lon, lat, height, lon0, lat0, height0=0.0)` / `enu_to_geodetic(east, north, up, lon0, lat0, height0=0.0)`
 Direct WGS84 geodetic/local ENU helpers.
 
-### `fit_similarity_2d(source_points, target_points)` / `apply_similarity_2d(points, parameters)`
-Fit and apply a 2D four-parameter similarity transformation.
+### `fit_similarity_2d(source, target, *, weights=None)` / `apply_similarity_2d(points, parameters)`
+Fit and apply a 2D four-parameter similarity transformation. Fitted parameters are `tx, ty, a, b`; the fit result also reports scale, rotation, residuals and RMSE.
 
-### `fit_affine_2d(source_points, target_points)` / `apply_affine_2d(points, parameters)`
+### `fit_affine_2d(source, target, *, weights=None)` / `apply_affine_2d(points, parameters)`
 Fit and apply a 2D six-parameter affine transformation.
 
 ## Engineering helpers
@@ -191,12 +191,12 @@ Fit and apply a 2D six-parameter affine transformation.
 The project deliberately stops at common small calculations in the current release.
 
 - `polar_stakeout(station, target)`
-- `offset_point(start, end, offset, along=None)`
+- `offset_point(start, end, chainage, offset=0.0)`
 - `chainage_offset(point, start, end)`
-- `slope(horizontal_distance, height_difference)`
-- `grade_elevation(start_height, chainage, grade_percent)`
-- `horizontal_distance_from_slope(slope_distance, vertical_angle_deg)`
-- `height_difference_from_slope_distance(slope_distance, vertical_angle_deg)`
+- `slope(horizontal_distance, height_difference, percent=True)`
+- `grade_elevation(start_height, horizontal_distance, grade, *, percent=True)`
+- `horizontal_distance_from_slope(slope_distance, vertical_angle_deg, *, angle_from_horizontal=True)`
+- `height_difference_from_slope_distance(slope_distance, vertical_angle_deg, *, angle_from_horizontal=True)`
 - `polygon_area(points)`
 
 ## Table/file helpers
