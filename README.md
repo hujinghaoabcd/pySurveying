@@ -13,6 +13,8 @@
 
 **Traverse · Leveling · Intersection · 2D Control Networks · Robust Adjustment · Gross-error Screening · Error Ellipses · Coordinate Transformation · Streamlit GUI**
 
+**English** · [简体中文](README_zh.md)
+
 </div>
 
 ---
@@ -251,8 +253,10 @@ The Streamlit interface includes:
 
 | Document | Purpose |
 | --- | --- |
+| [`docs/README.md`](docs/README.md) | documentation index |
 | [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | installation and first complete workflows |
 | [`docs/API.md`](docs/API.md) | public API reference |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | package architecture and design principles |
 | [`docs/STANDARD_EXAMPLES.md`](docs/STANDARD_EXAMPLES.md) | source-backed and regression examples |
 | [`docs/VALIDATION.md`](docs/VALIDATION.md) | numerical/statistical validation notes |
 | [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) | algorithm notes |
@@ -260,6 +264,7 @@ The Streamlit interface includes:
 | [`docs/FAQ.md`](docs/FAQ.md) | common questions and conventions |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | release scope and future direction |
 | [`docs/RELEASE.md`](docs/RELEASE.md) | TestPyPI/PyPI release procedure |
+| [`docs/LAUNCH.md`](docs/LAUNCH.md) | GitHub presentation, topics, social preview, and launch copy |
 | [`CHANGELOG.md`](CHANGELOG.md) | version history |
 
 ## Project scope
