@@ -3,73 +3,55 @@ name: tests
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
-  diagnostic:
-    name: Python 3.12 release diagnostic
+  test:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.12
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Validate and report
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install package and development dependencies
         run: |
-          set +e
-          : > ci-diagnostic.log
-          python -m pip install --upgrade pip 2>&1 | tee -a ci-diagnostic.log
-          python -m pip install -e ".[dev,ui]" 2>&1 | tee -a ci-diagnostic.log
-          install_code=${PIPESTATUS[0]}
-          import_code=99; compile_code=99; test_code=99; example_code=99; ruff_code=99; build_code=99; twine_code=99
-          if [ "$install_code" -eq 0 ]; then
-            echo '## Import' | tee -a ci-diagnostic.log
-            python -c "import pysurveying; print('pySurveying', pysurveying.__version__)" 2>&1 | tee -a ci-diagnostic.log
-            import_code=${PIPESTATUS[0]}
-            echo '## Compile' | tee -a ci-diagnostic.log
-            python -m compileall -q src/pysurveying examples 2>&1 | tee -a ci-diagnostic.log
-            compile_code=${PIPESTATUS[0]}
-            echo '## Pytest' | tee -a ci-diagnostic.log
-            python -m pytest -vv 2>&1 | tee -a ci-diagnostic.log
-            test_code=${PIPESTATUS[0]}
-            echo '## Runnable examples' | tee -a ci-diagnostic.log
-            python examples/textbook_parameter_adjustment.py 2>&1 | tee -a ci-diagnostic.log
-            example1=${PIPESTATUS[0]}
-            python examples/example_data_workflow.py 2>&1 | tee -a ci-diagnostic.log
-            example2=${PIPESTATUS[0]}
-            if [ "$example1" -eq 0 ] && [ "$example2" -eq 0 ]; then example_code=0; else example_code=1; fi
-            echo '## Ruff' | tee -a ci-diagnostic.log
-            python -m ruff check src tests examples 2>&1 | tee -a ci-diagnostic.log
-            ruff_code=${PIPESTATUS[0]}
-            echo '## Build' | tee -a ci-diagnostic.log
-            python -m build 2>&1 | tee -a ci-diagnostic.log
-            build_code=${PIPESTATUS[0]}
-            echo '## Twine' | tee -a ci-diagnostic.log
-            python -m twine check dist/* 2>&1 | tee -a ci-diagnostic.log
-            twine_code=${PIPESTATUS[0]}
-          fi
-          summary="install=$install_code import=$import_code compile=$compile_code pytest=$test_code examples=$example_code ruff=$ruff_code build=$build_code twine=$twine_code"
-          echo "$summary" | tee -a ci-diagnostic.log
-          body_file=$(mktemp)
-          {
-            echo "Automated pySurveying 0.3.0 release-preparation diagnostic for commit $GITHUB_SHA."
-            echo
-            echo '```text'
-            tail -n 420 ci-diagnostic.log
-            echo '```'
-          } > "$body_file"
-          gh issue create --title "CI diagnostic: ${GITHUB_SHA::7}" --body-file "$body_file" || true
-          if [ "$install_code" -ne 0 ] || [ "$import_code" -ne 0 ] || [ "$compile_code" -ne 0 ] || [ "$test_code" -ne 0 ] || [ "$example_code" -ne 0 ] || [ "$ruff_code" -ne 0 ] || [ "$build_code" -ne 0 ] || [ "$twine_code" -ne 0 ]; then exit 1; fi
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,ui]"
+
+      - name: Import smoke test
+        run: python -c "import pysurveying; print('pySurveying', pysurveying.__version__)"
+
+      - name: Compile UI and examples
+        run: python -m compileall -q src/pysurveying examples
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Run runnable examples
+        run: |
+          python examples/textbook_parameter_adjustment.py
+          python examples/example_data_workflow.py
+
+      - name: Run Ruff
+        run: python -m ruff check src tests examples
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Check PyPI metadata and README rendering
+        run: python -m twine check dist/*
