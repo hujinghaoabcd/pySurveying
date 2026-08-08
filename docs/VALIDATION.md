@@ -22,13 +22,21 @@ The test suite currently checks:
 2. Robust IRLS lowers the weight of an observation with a large standardized residual.
 3. Robust IRLS moves the parameter estimate closer to the uncontaminated observations than ordinary least squares in a synthetic one-parameter example.
 4. One-pass residual screening uses `Qvv` and redundancy information rather than raw residual magnitude alone.
-5. Iterative gross-error screening removes the largest standardized residual, rebuilds the adjustment, and stops when the retained observations satisfy the selected threshold.
+5. Iterative linear-model gross-error screening removes the largest standardized residual, rebuilds the adjustment, and stops when the retained observations satisfy the selected threshold.
 6. Error ellipses use the coordinate covariance matrix and a chi-square confidence scale; the undirected major-axis azimuth is canonicalized to `[0, 180)`.
 7. A distance-only free triangle has the expected three-dimensional observable rank and reproduces all three observed side lengths after minimum-norm adjustment.
+8. A redundant nonlinear distance control network exposes final-linearization `Qvv` and redundancy numbers whose sum agrees with the residual degrees of freedom.
+9. `control_network_quality` maps those diagnostics back to individual observations and preserves residuals in both normalized and original observation units.
+10. A synthetic ten-control-point distance network with one deliberately contaminated distance is re-adjusted iteratively and localizes the original gross observation index before recovering the unknown point close to its uncontaminated location.
+11. Adjustment-result table/Excel export preserves quality metadata such as raw residuals, standardized residuals, redundancy numbers and robust weights when those quantities are available.
+
+The latest diagnostic run for this validation cycle completed package installation, import, UI/example compilation, pytest, Ruff and package build successfully, with 44 tests passing.
 
 ## Important statistical scope
 
-`iterative_data_snooping` implements the computational elimination loop, not a universal significance-level design. The user remains responsible for choosing a threshold appropriate to the observation model, redundancy, false-alarm risk, and applicable surveying specification.
+`iterative_data_snooping` and `control_network_data_snooping` implement computational elimination loops, not universal significance-level designs. The user remains responsible for choosing a threshold appropriate to the observation model, redundancy, false-alarm risk and applicable surveying specification.
+
+For nonlinear control networks, `Qxx`, `Qvv`, redundancy numbers and standardized residuals are based on the final local linearization. They should be interpreted as local adjustment diagnostics rather than exact finite-nonlinearity quantities.
 
 Likewise, covariance reported after robust equivalent weighting is a local approximation. Classical least-squares covariance interpretation does not transfer unchanged to robust estimates.
 
@@ -40,7 +48,8 @@ The next validation targets are:
 
 - published traverse examples with angular and coordinate closure
 - leveling-network examples with unequal weights
-- mixed distance/direction/angle control networks
+- mixed distance/direction/angle control-network reference examples
+- gross-error localization tests involving angular observations as well as distances
 - independent free-network datum checks beyond the current distance-triangle regression
 - error-ellipse values against independent surveying software
 - real instrument files for Leica GSI and LandXML edge cases
