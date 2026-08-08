@@ -39,8 +39,9 @@ The test suite currently checks:
 13. A synthetic ten-control-point distance network with one deliberately contaminated distance is re-adjusted iteratively and localizes the original gross observation index before recovering the unknown point close to its uncontaminated location.
 14. A corresponding azimuth network with one deliberately contaminated angular observation is also localized by original observation index and recovers the unknown point after re-adjustment.
 15. Adjustment-result table/Excel export preserves quality metadata such as raw residuals, standardized residuals, redundancy numbers and robust weights when those quantities are available.
+16. `control_network_precision` extracts per-point `sigma_x`, `sigma_y`, covariance, positional standard deviation and confidence error ellipse from the adjusted coordinate covariance blocks.
 
-The latest diagnostic run for this validation cycle completed package installation, import, UI/example compilation, pytest, Ruff and package build successfully, with 48 tests passing.
+The pySurveying 0.2.1 release diagnostic completed package installation, import, UI/example compilation, pytest, Ruff and package build successfully, with **49 tests passing**. Both `pysurveying-0.2.1.tar.gz` and `pysurveying-0.2.1-py3-none-any.whl` were built successfully.
 
 ## Important statistical scope
 
