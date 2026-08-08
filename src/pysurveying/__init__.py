@@ -43,9 +43,13 @@ from .models import AdjustmentResult, LevelObservation, Observation, Point
 from .quality import (
     data_snooping,
     detect_outliers,
+    equivalent_weight_factor,
+    equivalent_weight_factors,
     error_ellipse,
+    iterative_data_snooping,
     redundancy_numbers,
     robust_least_squares,
+    robust_least_squares_irls,
     standardized_residuals,
 )
 from .transform import (
@@ -96,6 +100,8 @@ __all__ = [
     "ecef_to_geodetic",
     "enu_to_ecef",
     "enu_to_geodetic",
+    "equivalent_weight_factor",
+    "equivalent_weight_factors",
     "error_ellipse",
     "export_adjustment_excel",
     "fit_affine_2d",
@@ -108,6 +114,7 @@ __all__ = [
     "height_difference_from_slope_distance",
     "horizontal_distance_from_slope",
     "inverse_coordinate",
+    "iterative_data_snooping",
     "least_squares",
     "level_observations_from_dataframe",
     "leveling_network",
@@ -123,6 +130,7 @@ __all__ = [
     "redundancy_numbers",
     "resection",
     "robust_least_squares",
+    "robust_least_squares_irls",
     "slope",
     "standardized_residuals",
     "transform_coordinates",
