@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 from pyproj import CRS, Transformer
@@ -111,3 +111,125 @@ def enu_to_geodetic(
 ) -> tuple[float, float, float]:
     """Convert local ENU coordinates directly to WGS84 geodetic coordinates."""
     return ecef_to_geodetic(*enu_to_ecef(east, north, up, lon0, lat0, height0))
+
+
+def _xy_array(points: Sequence[Sequence[float]], minimum: int) -> np.ndarray:
+    array = np.asarray(points, dtype=float)
+    if array.ndim != 2 or array.shape[1] != 2 or array.shape[0] < minimum:
+        raise ValueError(f"points must have shape (n, 2) with n >= {minimum}")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("points must contain finite values")
+    return array
+
+
+def _point_weights(weights: Sequence[float] | None, n: int) -> np.ndarray:
+    if weights is None:
+        return np.ones(n, dtype=float)
+    values = np.asarray(weights, dtype=float)
+    if values.size != n or np.any(values <= 0):
+        raise ValueError("weights must be positive and match the number of points")
+    return values
+
+
+def fit_similarity_2d(
+    source: Sequence[Sequence[float]],
+    target: Sequence[Sequence[float]],
+    *,
+    weights: Sequence[float] | None = None,
+) -> dict[str, object]:
+    """Fit a four-parameter 2D similarity transformation.
+
+    The model is ``X = tx + a*x - b*y`` and ``Y = ty + b*x + a*y``.
+    Returned rotation is counter-clockwise in the mathematical XY plane.
+    """
+    src = _xy_array(source, 2)
+    dst = _xy_array(target, 2)
+    if src.shape != dst.shape:
+        raise ValueError("source and target must have the same shape")
+    point_weights = _point_weights(weights, len(src))
+
+    A = np.zeros((2 * len(src), 4), dtype=float)
+    L = dst.reshape(-1)
+    for i, (x, y) in enumerate(src):
+        A[2 * i] = [1.0, 0.0, x, -y]
+        A[2 * i + 1] = [0.0, 1.0, y, x]
+
+    sqrt_w = np.repeat(np.sqrt(point_weights), 2)
+    parameters, *_ = np.linalg.lstsq(A * sqrt_w[:, None], L * sqrt_w, rcond=None)
+    tx, ty, a, b = parameters
+    transformed = apply_similarity_2d(src, parameters)
+    residuals = transformed - dst
+    rmse = float(np.sqrt(np.mean(np.sum(residuals**2, axis=1))))
+    return {
+        "parameters": parameters,
+        "tx": float(tx),
+        "ty": float(ty),
+        "a": float(a),
+        "b": float(b),
+        "scale": float(math.hypot(a, b)),
+        "rotation_deg": float(math.degrees(math.atan2(b, a))),
+        "residuals": residuals,
+        "rmse": rmse,
+    }
+
+
+def apply_similarity_2d(
+    points: Sequence[Sequence[float]],
+    parameters: Sequence[float] | Mapping[str, float],
+) -> np.ndarray:
+    """Apply a four-parameter similarity transformation to XY points."""
+    pts = _xy_array(points, 1)
+    if isinstance(parameters, Mapping):
+        tx = float(parameters["tx"])
+        ty = float(parameters["ty"])
+        a = float(parameters["a"])
+        b = float(parameters["b"])
+    else:
+        values = np.asarray(parameters, dtype=float).reshape(-1)
+        if values.size != 4:
+            raise ValueError("similarity parameters must contain tx, ty, a, b")
+        tx, ty, a, b = values
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return np.column_stack((tx + a * x - b * y, ty + b * x + a * y))
+
+
+def fit_affine_2d(
+    source: Sequence[Sequence[float]],
+    target: Sequence[Sequence[float]],
+    *,
+    weights: Sequence[float] | None = None,
+) -> dict[str, object]:
+    """Fit a six-parameter 2D affine transformation."""
+    src = _xy_array(source, 3)
+    dst = _xy_array(target, 3)
+    if src.shape != dst.shape:
+        raise ValueError("source and target must have the same shape")
+    point_weights = _point_weights(weights, len(src))
+
+    A = np.zeros((2 * len(src), 6), dtype=float)
+    L = dst.reshape(-1)
+    for i, (x, y) in enumerate(src):
+        A[2 * i] = [1.0, x, y, 0.0, 0.0, 0.0]
+        A[2 * i + 1] = [0.0, 0.0, 0.0, 1.0, x, y]
+
+    sqrt_w = np.repeat(np.sqrt(point_weights), 2)
+    parameters, *_ = np.linalg.lstsq(A * sqrt_w[:, None], L * sqrt_w, rcond=None)
+    transformed = apply_affine_2d(src, parameters)
+    residuals = transformed - dst
+    rmse = float(np.sqrt(np.mean(np.sum(residuals**2, axis=1))))
+    return {"parameters": parameters, "residuals": residuals, "rmse": rmse}
+
+
+def apply_affine_2d(
+    points: Sequence[Sequence[float]], parameters: Sequence[float]
+) -> np.ndarray:
+    """Apply six affine parameters ``tx, a, b, ty, c, d`` to XY points."""
+    pts = _xy_array(points, 1)
+    values = np.asarray(parameters, dtype=float).reshape(-1)
+    if values.size != 6:
+        raise ValueError("affine parameters must contain tx, a, b, ty, c, d")
+    tx, a, b, ty, c, d = values
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return np.column_stack((tx + a * x + b * y, ty + c * x + d * y))
