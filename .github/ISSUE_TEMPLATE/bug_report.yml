@@ -1,0 +1,106 @@
+name: Bug report
+description: Report a reproducible problem in pySurveying
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Numerical issues are easiest to review when units, coordinate conventions, input data, expected output, and actual output are all explicit.
+
+  - type: input
+    id: version
+    attributes:
+      label: pySurveying version or commit
+      placeholder: "0.3.0 or commit SHA"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / Ubuntu 24.04 / macOS ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Basic coordinate calculation
+        - Intersection / resection
+        - Traverse
+        - Leveling
+        - Linear least squares
+        - 2D control network
+        - Robust estimation / gross-error screening
+        - Precision / error ellipse
+        - Coordinate transformation
+        - Engineering helper
+        - Data IO
+        - Streamlit GUI
+        - Packaging / installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproducible example
+      description: Include the smallest code/data example that still shows the problem.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: conventions
+    attributes:
+      label: Units and conventions
+      description: State coordinate order, angle units, distance/height units, observation sigma units, and any datum/CRS assumptions.
+      placeholder: "+Y north, +X east; angles in degrees; distances in metres; ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result / traceback
+    validations:
+      required: true
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference result or source
+      description: If the expected value comes from a textbook, paper, standard, spreadsheet, or other software, identify it clearly.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the README, Quick Start, API documentation, and FAQ.
+          required: true
+        - label: I removed private/sensitive survey data from this report.
+          required: true
+        - label: This is not a security vulnerability with exploit details.
+          required: true
