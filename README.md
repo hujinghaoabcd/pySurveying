@@ -1,58 +1,55 @@
+<div align="center">
+
 # pySurveying
 
-A lightweight Python toolkit for surveying computation, least-squares adjustment, quality control, coordinate transformation, and visualization.
+**Lightweight surveying computation, adjustment, quality control, and visualization for Python.**
 
-> 轻量级 Python 测量计算、测量平差、质量控制与可视化工具包。
+轻量级 Python 测量计算、测量平差、质量控制与可视化工具包。
 
-**Current version: 0.3.0 — release preparation**
+[![tests](https://github.com/hujinghaoabcd/pySurveying/actions/workflows/tests.yml/badge.svg)](https://github.com/hujinghaoabcd/pySurveying/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)](CHANGELOG.md)
 
-pySurveying is designed for teaching, reproducible surveying examples, engineering-data checks, and small 2D control-network adjustment. It deliberately stays compact instead of trying to become a full geodetic production platform.
+**Traverse · Leveling · Intersection · 2D Control Networks · Robust Adjustment · Gross-error Screening · Error Ellipses · Coordinate Transformation · Streamlit GUI**
 
-## What is included
+</div>
 
-| Area | Current scope |
-| --- | --- |
-| Basic surveying | DMS/decimal degrees, distance, surveying azimuth, coordinate forward/inverse computation |
-| Intersection | forward intersection, distance intersection, 2D orientation resection |
-| Traverse | closed/connected traverse, angular closure, azimuth propagation, Bowditch coordinate adjustment |
-| Leveling | leveling route and weighted least-squares leveling network |
-| Linear adjustment | weighted least squares with diagonal or full correlated weight matrices |
-| 2D control networks | distance, azimuth, direction and horizontal-angle observations |
-| Free/robust adjustment | minimum-norm 2D free network, Huber robust network adjustment, Huber/IGG1/IGG3 linear IRLS |
-| Quality control | `Qxx`, `Qvv`, redundancy numbers, standardized residuals, iterative gross-error screening |
-| Precision | coordinate standard deviations, positional standard deviation, confidence error ellipses |
-| Transformation | `pyproj` CRS conversion, WGS84/ECEF/ENU, 2D similarity and affine fitting |
-| Engineering helpers | polar stakeout, offset/chainage, slope, grade elevation, area |
-| Data/result IO | CSV, Excel, LandXML points, low-level Leica GSI words, Excel adjustment reports |
-| GUI | bundled Streamlit interface |
+---
 
-### Scope freeze for 0.3.0
+## Why pySurveying?
 
-The current release **does not expand** instrument-brand formats or engineering-survey modules. In particular, 0.3.0 is not adding a large catalog of Trimble/Topcon/Sokkia/Chinese-instrument formats, nor road alignment, earthwork, deformation-monitoring or other large engineering subsystems. The focus is validation, examples, documentation, GUI usability and packaging quality.
+Surveying calculations are often scattered across classroom scripts, spreadsheets, proprietary software, and large geodetic packages. **pySurveying keeps the common workflow small, inspectable, and Python-native**:
 
-## Coordinate and observation conventions
+- **Functions first** — straightforward NumPy/SciPy APIs instead of a deep framework.
+- **Adjustment + quality together** — coordinates are not the end of the calculation; residuals, `Qxx`, `Qvv`, redundancy, precision, and error ellipses are part of the workflow.
+- **Reproducible examples** — textbook-backed least-squares cases and transparent CSV examples are executable and regression-tested.
+- **GUI included** — common calculations can be explored without writing code through the bundled Streamlit interface.
+- **Deliberately lightweight** — this is not trying to replace a full national geodetic-processing suite or a commercial surveying platform.
 
-For the local planar helpers:
+> **Current release target:** `0.3.0` — documentation and public-release preparation.
 
-- coordinates are `(x, y)`;
-- `+Y` is north and `+X` is east;
-- surveying azimuth is measured clockwise from north;
-- public surveying angles are decimal degrees unless documented otherwise;
-- distances, coordinates and linear standard deviations in one calculation must use consistent units;
-- `Observation.sigma` uses coordinate units for `distance`, and degrees for `azimuth`, `direction` and `angle`.
+## 30-second start
 
-For CRS transformations, `pyproj` conventions apply. `transform_coordinates(..., always_xy=True)` uses longitude/easting first and latitude/northing second.
-
-## Installation
-
-### Current source installation
-
-Until the first PyPI release is published, install directly from the repository:
+Until the first PyPI release is published:
 
 ```bash
 git clone https://github.com/hujinghaoabcd/pySurveying.git
 cd pySurveying
 python -m pip install -e .
+```
+
+Then:
+
+```python
+from pysurveying import distance, azimuth, forward_coordinate
+
+A = (1000.0, 1000.0)
+B = (1100.0, 1050.0)
+
+print(distance(A, B))
+print(azimuth(A, B))
+print(forward_coordinate(*A, azimuth_deg=30.0, length=100.0))
 ```
 
 For the visual interface:
@@ -62,35 +59,45 @@ python -m pip install -e ".[ui]"
 pysurveying-ui
 ```
 
-For development and validation:
-
-```bash
-python -m pip install -e ".[dev,ui]"
-python -m pytest
-python -m ruff check src tests examples
-python -m build
-python -m twine check dist/*
-```
-
-After the first PyPI release, installation will become:
+After the first PyPI release:
 
 ```bash
 python -m pip install pysurveying
 python -m pip install "pysurveying[ui]"
 ```
 
-## Quick start
+## What it covers
 
-```python
-from pysurveying import Point, azimuth, distance, forward_coordinate
+| Area | Current scope |
+| --- | --- |
+| Basic surveying | DMS/decimal degrees, distance, surveying azimuth, coordinate forward/inverse computation |
+| Intersection | forward intersection, distance intersection, 2D orientation resection |
+| Traverse | closed/connected traverse, angular closure, azimuth propagation, Bowditch coordinate adjustment |
+| Leveling | leveling route and weighted least-squares leveling network |
+| Linear adjustment | weighted least squares with diagonal or full correlated weight matrices |
+| 2D control networks | distance, azimuth, direction, and horizontal-angle observations |
+| Free/robust adjustment | minimum-norm 2D free network, Huber robust network adjustment, Huber/IGG1/IGG3 linear IRLS |
+| Quality control | `Qxx`, `Qvv`, redundancy numbers, standardized residuals, iterative gross-error screening |
+| Precision | coordinate standard deviations, positional standard deviation, confidence error ellipses |
+| Transformation | `pyproj` CRS conversion, WGS84/ECEF/ENU, 2D similarity and affine fitting |
+| Engineering helpers | polar stakeout, offset/chainage, slope, grade elevation, area |
+| Data/result IO | CSV, Excel, LandXML points, conservative low-level Leica GSI words, Excel reports |
+| GUI | bundled Streamlit application |
 
-p1 = Point("A", 1000.0, 1000.0)
-p2 = Point("B", 1100.0, 1050.0)
+## Surveying conventions
 
-print(distance(p1, p2))
-print(azimuth(p1, p2))
-print(forward_coordinate(p1.x, p1.y, 30.0, 100.0))
-```
+For local planar calculations:
+
+- coordinates are `(x, y)`;
+- `+Y` is north and `+X` is east;
+- surveying azimuth is measured clockwise from north;
+- public surveying angles are decimal degrees unless documented otherwise;
+- linear quantities within one calculation must use consistent units;
+- `Observation.sigma` uses coordinate units for `distance`, and degrees for `azimuth`, `direction`, and `angle`.
+
+For CRS transformations, `pyproj` conventions apply. `transform_coordinates(..., always_xy=True)` uses longitude/easting first and latitude/northing second.
+
+## Core examples
 
 ### Weighted least squares
 
@@ -100,6 +107,7 @@ from pysurveying import least_squares
 
 A = np.array([[1.0], [1.0], [1.0]])
 L = np.array([10.01, 9.99, 10.00])
+
 result = least_squares(A, L)
 
 print(result.parameters)
@@ -108,7 +116,7 @@ print(result.sigma0)
 print(result.metadata["qvv"])
 ```
 
-`P` may be omitted, supplied as a positive weight vector, or supplied as a complete symmetric weight matrix for correlated observations.
+`P` can be omitted, supplied as a positive observation-weight vector, or supplied as a complete symmetric weight matrix for correlated observations.
 
 ### Closed traverse from measured angles
 
@@ -168,6 +176,7 @@ observations = [
 ]
 
 result = adjust_control_network(points, observations)
+
 print(result.metadata["adjusted_points"])
 print(control_network_quality(result, observations))
 print(control_network_precision(result))
@@ -175,20 +184,24 @@ print(control_network_precision(result))
 
 For robust network adjustment use `adjust_control_network_robust(...)`. For repeated standardized-residual screening and re-adjustment use `control_network_data_snooping(...)`.
 
-## Reference-backed examples
+## Validation
 
-The repository contains exact numerical regression tests for two examples in 宋力杰《测量平差程序设计》:
+The repository contains **source-backed numerical regressions** for two examples in 宋力杰《测量平差程序设计》:
 
 - §3.1.5 independent weighted parameter adjustment;
 - §3.2.5 correlated-observation parameter adjustment using the full printed weight matrix.
 
-Both reproduce the book's printed parameter solution, residual vector, unit-weight standard deviation and `Qxx` values. Run them directly with:
+Both reproduce the printed parameter solution, residual vector, unit-weight standard deviation, and `Qxx` values.
+
+Run them directly:
 
 ```bash
 python examples/textbook_parameter_adjustment.py
 ```
 
-See `docs/STANDARD_EXAMPLES.md` for what is source-backed, what is a transparent package regression example, and what is **not** claimed as an external standard.
+The release-preparation diagnostic currently exercises **52 tests**, both runnable example programs, package compilation, Ruff, wheel/sdist build, and `twine check`.
+
+See [`docs/STANDARD_EXAMPLES.md`](docs/STANDARD_EXAMPLES.md) and [`docs/VALIDATION.md`](docs/VALIDATION.md) for what is externally backed, what is a transparent package regression example, and what is **not** claimed as a standard.
 
 ## Shipped example data
 
@@ -204,7 +217,7 @@ examples/data/
 └── common_points.csv
 ```
 
-They are not decorative samples: automated tests load and execute them so that documentation/example data cannot silently drift away from the package API.
+These are executed by automated tests so example data cannot silently drift away from the package API.
 
 Run the combined workflow:
 
@@ -214,39 +227,58 @@ python examples/example_data_workflow.py
 
 ## GUI
 
-Launch with:
+Launch:
 
 ```bash
 pysurveying-ui
 ```
 
-The Streamlit interface contains pages for:
+The Streamlit interface includes:
 
-- overview and conventions;
-- basic coordinate computation;
+- coordinate calculations;
 - intersection and resection;
 - traverse adjustment;
 - leveling route/network adjustment;
 - 2D control-network adjustment;
-- observation quality, point precision and optional gross-error screening;
-- linear least squares and built-in textbook regression examples;
-- coordinate transformation;
-- the intentionally limited engineering helpers;
-- data import and downloadable example CSV files.
-
-Control-network results can be exported to Excel together with residual-quality diagnostics.
+- observation quality and point precision;
+- optional gross-error screening;
+- textbook least-squares examples;
+- CRS / ENU / 2D transformation helpers;
+- intentionally limited engineering helpers;
+- data import, example-data download, and Excel result export.
 
 ## Documentation
 
-- [`docs/API.md`](docs/API.md) — public API reference
-- [`docs/STANDARD_EXAMPLES.md`](docs/STANDARD_EXAMPLES.md) — reference-backed and regression examples
-- [`docs/VALIDATION.md`](docs/VALIDATION.md) — numerical/statistical validation notes
-- [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) — algorithm notes
-- [`docs/DATA_FORMATS.md`](docs/DATA_FORMATS.md) — supported table/file formats
-- [`docs/RELEASE.md`](docs/RELEASE.md) — PyPI release procedure
-- [`CHANGELOG.md`](CHANGELOG.md) — version history
+| Document | Purpose |
+| --- | --- |
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | installation and first complete workflows |
+| [`docs/API.md`](docs/API.md) | public API reference |
+| [`docs/STANDARD_EXAMPLES.md`](docs/STANDARD_EXAMPLES.md) | source-backed and regression examples |
+| [`docs/VALIDATION.md`](docs/VALIDATION.md) | numerical/statistical validation notes |
+| [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) | algorithm notes |
+| [`docs/DATA_FORMATS.md`](docs/DATA_FORMATS.md) | supported table/file formats |
+| [`docs/FAQ.md`](docs/FAQ.md) | common questions and conventions |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | release scope and future direction |
+| [`docs/RELEASE.md`](docs/RELEASE.md) | TestPyPI/PyPI release procedure |
+| [`CHANGELOG.md`](CHANGELOG.md) | version history |
 
-## Package structure
+## Project scope
+
+`0.3.0` intentionally **freezes feature expansion** while documentation and release quality are completed.
+
+The current release is **not** expanding into:
+
+- a large catalog of Trimble/Topcon/Sokkia/Chinese-instrument parsers;
+- road alignment and curve design;
+- earthwork-volume systems;
+- deformation-monitoring platforms;
+- GNSS PPP/RTK processing;
+- photogrammetry, point clouds, or SLAM;
+- a replacement for a certified national/commercial geodetic suite.
+
+Keeping that boundary is part of the project design, not an unfinished feature list.
+
+## Project structure
 
 ```text
 src/pysurveying/
@@ -259,29 +291,45 @@ src/pysurveying/
 ├── precision.py    # coordinate precision and error ellipses
 ├── transform.py    # CRS / ECEF / ENU / 2D transforms
 ├── engineering.py  # limited common engineering calculations
-├── io.py           # tables, LandXML/GSI helpers and result export
+├── io.py           # tables, LandXML/GSI helpers, result export
 ├── ui.py           # command entry point
 └── webapp.py       # Streamlit application
 ```
 
-## Validation and statistical scope
+## Contributing
 
-The project favors small, inspectable regression cases rather than a hidden reference dataset. Current validation covers independent and correlated weighted parameter adjustment, robust-equivalent weighting, `Qvv`/redundancy diagnostics, distance and angular gross-error localization, free-network internal geometry, point precision/ellipses, transformations, IO and the shipped example datasets.
+Bug reports, validation cases, documentation improvements, tests, and focused surveying algorithms are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
 
-Important qualifications:
+For usage questions, see [`SUPPORT.md`](SUPPORT.md) and [`docs/FAQ.md`](docs/FAQ.md).
 
-- nonlinear control-network `Qxx`, `Qvv`, redundancy numbers and standardized residuals are based on the final local linearization;
-- robust covariance is an approximate local/equivalent-weight covariance;
-- free-network absolute coordinates and covariance depend on the selected datum realization;
-- gross-error routines are computational screening tools, not a universal replacement for significance-level design in a governing specification;
-- the Leica GSI helper intentionally exposes conservative low-level records rather than claiming every instrument template.
+## Citation
 
-For legal, cadastral, metrology or high-order production work, independently verify observation conventions, stochastic models, datum definitions, units and acceptance tolerances against the applicable specification.
+If pySurveying contributes to academic or technical work, please cite the software repository. GitHub can expose the repository citation metadata from [`CITATION.cff`](CITATION.cff).
 
-## PyPI release preparation
+```text
+Hu, Jinghao. pySurveying: Lightweight surveying computation,
+adjustment, quality control, and visualization for Python.
+https://github.com/hujinghaoabcd/pySurveying
+```
 
-The repository contains `.github/workflows/publish.yml` for tag-triggered PyPI Trusted Publishing. Publication is intentionally not automatic from every `main` push. The one-time PyPI trusted-publisher/environment setup is documented in `docs/RELEASE.md`; after that, a release tag such as `v0.3.0` can trigger the publish workflow.
+A DOI can be added to the citation metadata later if a versioned software archive is created.
+
+## Statistical and production-use notes
+
+- Nonlinear control-network `Qxx`, `Qvv`, redundancy numbers, and standardized residuals use the final local linearization.
+- Robust covariance is an approximate local/equivalent-weight covariance.
+- Free-network absolute coordinates and covariance depend on the selected datum realization.
+- Gross-error routines are computational screening tools, not a universal replacement for significance-level design required by a governing specification.
+- The Leica GSI helper intentionally exposes conservative low-level records rather than claiming every instrument template.
+
+For legal, cadastral, metrology, or high-order production work, independently verify observation conventions, stochastic models, datum definitions, units, and acceptance tolerances against the applicable specification.
+
+## Release status
+
+The package is being prepared for a **TestPyPI → PyPI** first release. Publishing workflows are already in `.github/workflows/`; production publishing is deliberately tag-triggered rather than automatic on every `main` push.
+
+See [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## License
 
-MIT
+MIT. See [`LICENSE`](LICENSE).
