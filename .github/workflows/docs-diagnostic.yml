@@ -1,0 +1,137 @@
+name: docs-diagnostic
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Validate release documentation and package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          : > docs-diagnostic.log
+
+          python -m pip install --upgrade pip >> docs-diagnostic.log 2>&1
+          python -m pip install -e ".[dev,ui]" pyyaml >> docs-diagnostic.log 2>&1
+          install_code=$?
+
+          pytest_code=99
+          ruff_code=99
+          examples_code=99
+          build_code=99
+          twine_code=99
+          yaml_code=99
+          links_code=99
+          citation_code=99
+
+          if [ "$install_code" -eq 0 ]; then
+            python -m pytest >> docs-diagnostic.log 2>&1
+            pytest_code=$?
+
+            python -m ruff check src tests examples >> docs-diagnostic.log 2>&1
+            ruff_code=$?
+
+            python examples/textbook_parameter_adjustment.py >> docs-diagnostic.log 2>&1 && \
+              python examples/example_data_workflow.py >> docs-diagnostic.log 2>&1
+            examples_code=$?
+
+            python -m build >> docs-diagnostic.log 2>&1
+            build_code=$?
+
+            python -m twine check dist/* >> docs-diagnostic.log 2>&1
+            twine_code=$?
+
+            python - <<'PY' >> docs-diagnostic.log 2>&1
+          from pathlib import Path
+          import yaml
+
+          files = list(Path('.github').rglob('*.yml')) + list(Path('.github').rglob('*.yaml'))
+          for path in files:
+              with path.open(encoding='utf-8') as stream:
+                  yaml.safe_load(stream)
+              print('YAML OK:', path)
+          PY
+            yaml_code=$?
+
+            python - <<'PY' >> docs-diagnostic.log 2>&1
+          from pathlib import Path
+          import re
+
+          markdown_files = [
+              Path('README.md'), Path('README_zh.md'), Path('CONTRIBUTING.md'),
+              Path('SUPPORT.md'), Path('SECURITY.md'), Path('CODE_OF_CONDUCT.md'),
+              Path('CHANGELOG.md'),
+          ] + list(Path('docs').glob('*.md'))
+
+          pattern = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
+          missing = []
+          for doc in markdown_files:
+              text = doc.read_text(encoding='utf-8')
+              for target in pattern.findall(text):
+                  target = target.strip().split('#', 1)[0]
+                  if not target or target.startswith(('http://', 'https://', 'mailto:', '#')):
+                      continue
+                  target = target.split('?', 1)[0]
+                  candidate = (doc.parent / target).resolve()
+                  if not candidate.exists():
+                      missing.append((str(doc), target))
+          if missing:
+              for doc, target in missing:
+                  print('BROKEN LOCAL LINK:', doc, '->', target)
+              raise SystemExit(1)
+          print('Markdown local links OK:', len(markdown_files), 'documents checked')
+          PY
+            links_code=$?
+
+            python - <<'PY' >> docs-diagnostic.log 2>&1
+          from pathlib import Path
+          import yaml
+
+          data = yaml.safe_load(Path('CITATION.cff').read_text(encoding='utf-8'))
+          required = ['cff-version', 'message', 'title', 'type', 'authors', 'version', 'repository-code', 'license']
+          missing = [key for key in required if not data.get(key)]
+          if missing:
+              raise SystemExit(f'Missing CITATION.cff keys: {missing}')
+          if data['cff-version'] != '1.2.0':
+              raise SystemExit('Unexpected cff-version')
+          print('CITATION.cff basic metadata OK')
+          PY
+            citation_code=$?
+          fi
+
+          summary="install=$install_code pytest=$pytest_code ruff=$ruff_code examples=$examples_code build=$build_code twine=$twine_code yaml=$yaml_code links=$links_code citation=$citation_code"
+          echo "$summary" | tee -a docs-diagnostic.log
+
+          body=$(mktemp)
+          {
+            echo "Documentation/public-release diagnostic for commit $GITHUB_SHA."
+            echo
+            echo '```text'
+            tail -n 160 docs-diagnostic.log
+            echo '```'
+          } > "$body"
+          gh issue create --title "Docs diagnostic: ${GITHUB_SHA::7}" --body-file "$body" || true
+
+          if [ "$install_code" -ne 0 ] || [ "$pytest_code" -ne 0 ] || [ "$ruff_code" -ne 0 ] || \
+             [ "$examples_code" -ne 0 ] || [ "$build_code" -ne 0 ] || [ "$twine_code" -ne 0 ] || \
+             [ "$yaml_code" -ne 0 ] || [ "$links_code" -ne 0 ] || [ "$citation_code" -ne 0 ]; then
+            exit 1
+          fi
