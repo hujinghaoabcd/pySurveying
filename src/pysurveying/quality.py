@@ -7,8 +7,8 @@ import numpy as np
 from scipy.optimize import least_squares as scipy_least_squares
 from scipy.stats import chi2
 
-from .adjustment import least_squares
-from .models import AdjustmentResult
+from .adjustment import adjust_control_network, least_squares
+from .models import AdjustmentResult, Observation, Point
 
 
 def equivalent_weight_factor(
@@ -122,16 +122,7 @@ def robust_least_squares_irls(
     max_iterations: int = 50,
     tolerance: float = 1e-10,
 ) -> AdjustmentResult:
-    """Surveying-style robust linear adjustment by equivalent-weight IRLS.
-
-    The initial ordinary least-squares solution supplies the residual standard
-    deviations ``sigma0 * sqrt(diag(Qvv))``. Standardized residuals are converted
-    to equivalent weights with Huber, IGG1, or IGG3, and the weighted adjustment
-    is repeated until the parameters stabilize.
-
-    The robust covariance is a local approximation based on the final equivalent
-    weights; it is not identical to classical least-squares covariance.
-    """
+    """Surveying-style robust linear adjustment by equivalent-weight IRLS."""
     A = np.asarray(A, dtype=float)
     L = np.asarray(L, dtype=float).reshape(-1)
     if A.ndim != 2 or A.shape[0] != L.size:
@@ -228,13 +219,7 @@ def robust_least_squares_irls(
 
 
 def standardized_residuals(result: AdjustmentResult) -> np.ndarray:
-    """Return standardized residuals for quality-control screening.
-
-    For results produced by :func:`pysurveying.adjustment.least_squares`, ``Qvv``
-    is used so observations with low redundancy are not judged by raw residual
-    magnitude alone. For other results a simpler posterior-sigma standardization
-    is used as a fallback.
-    """
+    """Return standardized residuals using ``Qvv`` when available."""
     residuals = np.asarray(result.residuals, dtype=float)
     if residuals.size == 0:
         return residuals
@@ -273,11 +258,7 @@ def detect_outliers(result: AdjustmentResult, threshold: float = 3.0) -> list[in
 def data_snooping(
     result: AdjustmentResult, threshold: float = 3.0
 ) -> list[dict[str, float | int | bool]]:
-    """Return a compact residual-screening table.
-
-    This is a practical standardized-residual screen rather than a full statistical
-    multiple-testing implementation of Baarda's data snooping procedure.
-    """
+    """Return a compact residual-screening table."""
     if threshold <= 0:
         raise ValueError("threshold must be positive")
     residuals = np.asarray(result.residuals, dtype=float)
@@ -305,14 +286,7 @@ def iterative_data_snooping(
     threshold: float = 3.0,
     max_removals: int | None = None,
 ) -> dict[str, object]:
-    """Iteratively remove the largest standardized residual above a threshold.
-
-    Each cycle performs a fresh least-squares adjustment on the retained
-    observations, finds the largest absolute standardized residual, removes that
-    observation when it exceeds ``threshold``, and repeats. This mirrors the
-    classical surveying gross-error search workflow while deliberately leaving the
-    statistical choice of threshold to the caller.
-    """
+    """Iteratively remove the largest standardized residual above a threshold."""
     A = np.asarray(A, dtype=float)
     L = np.asarray(L, dtype=float).reshape(-1)
     if A.ndim != 2 or A.shape[0] != L.size:
@@ -398,6 +372,193 @@ def iterative_data_snooping(
         "removed_indices": removed,
         "active_indices": np.flatnonzero(active).tolist(),
         "history": history,
+        "converged": stopped_reason == "threshold_satisfied",
+        "stopped_reason": stopped_reason,
+        "threshold": threshold,
+    }
+
+
+def control_network_quality(
+    result: AdjustmentResult,
+    observations: Sequence[Observation],
+    *,
+    threshold: float = 3.0,
+) -> list[dict[str, object]]:
+    """Return observation-by-observation quality diagnostics for a control network.
+
+    Residuals from :func:`adjust_control_network` are normalized by each observation
+    sigma. This table adds the residual in the observation's original unit, the
+    standardized residual based on the final local ``Qvv``, the redundancy number,
+    and the final robust weight when applicable.
+    """
+    if threshold <= 0:
+        raise ValueError("threshold must be positive")
+    if len(observations) != len(result.residuals):
+        raise ValueError("observations must match the adjustment result")
+
+    normalized = np.asarray(result.residuals, dtype=float)
+    raw = result.metadata.get("raw_residuals") if result.metadata else None
+    if raw is None:
+        raw = np.asarray(
+            [value * obs.sigma for value, obs in zip(normalized, observations)],
+            dtype=float,
+        )
+    else:
+        raw = np.asarray(raw, dtype=float)
+    standardized = standardized_residuals(result)
+    redundancy = redundancy_numbers(result)
+    weights = result.metadata.get("robust_weights") if result.metadata else None
+    if weights is None:
+        weights = np.ones(normalized.size, dtype=float)
+    else:
+        weights = np.asarray(weights, dtype=float)
+
+    rows: list[dict[str, object]] = []
+    for index, obs in enumerate(observations):
+        kind = obs.kind.lower()
+        rows.append(
+            {
+                "index": index,
+                "kind": kind,
+                "from_point": obs.from_point,
+                "to_point": obs.to_point,
+                "target2": obs.target2,
+                "observed_value": float(obs.value),
+                "sigma": float(obs.sigma),
+                "residual_observation_unit": float(raw[index]),
+                "residual_unit": "deg" if kind in {"azimuth", "direction", "angle"} else "coordinate",
+                "normalized_residual": float(normalized[index]),
+                "standardized_residual": float(standardized[index]),
+                "redundancy": float(redundancy[index]),
+                "robust_weight": float(weights[index]),
+                "flagged": bool(abs(standardized[index]) >= threshold),
+            }
+        )
+    return rows
+
+
+def control_network_data_snooping(
+    points: Sequence[Point],
+    observations: Sequence[Observation],
+    *,
+    threshold: float = 3.0,
+    max_removals: int | None = None,
+    **adjustment_kwargs,
+) -> dict[str, object]:
+    """Iteratively locate and remove gross observations in a 2D control network.
+
+    Every cycle performs a fresh ordinary network adjustment, computes standardized
+    residuals from the final local ``Qvv``, removes the observation with the largest
+    absolute standardized residual when it exceeds ``threshold``, and re-adjusts.
+    The original observation indices are preserved in the returned history.
+    """
+    if threshold <= 0:
+        raise ValueError("threshold must be positive")
+    if max_removals is not None and max_removals < 0:
+        raise ValueError("max_removals must be non-negative")
+    if adjustment_kwargs.get("robust"):
+        raise ValueError("control-network data snooping uses ordinary adjustment")
+
+    original = list(observations)
+    if not original:
+        raise ValueError("network has no observations")
+    active = list(range(len(original)))
+    removed: list[int] = []
+    history: list[dict[str, object]] = []
+    final_result: AdjustmentResult | None = None
+    stopped_reason = "threshold_satisfied"
+
+    while True:
+        current_observations = [original[index] for index in active]
+        final_result = adjust_control_network(
+            points,
+            current_observations,
+            robust=False,
+            **adjustment_kwargs,
+        )
+        if final_result.sigma0 is None or final_result.dof <= 0:
+            stopped_reason = "insufficient_redundancy"
+            break
+
+        rows = control_network_quality(
+            final_result,
+            current_observations,
+            threshold=threshold,
+        )
+        local_index = int(
+            np.argmax([abs(float(row["standardized_residual"])) for row in rows])
+        )
+        global_index = active[local_index]
+        row = rows[local_index]
+        flagged = bool(row["flagged"])
+        history.append(
+            {
+                "iteration": len(history) + 1,
+                "index": global_index,
+                "kind": row["kind"],
+                "from_point": row["from_point"],
+                "to_point": row["to_point"],
+                "target2": row["target2"],
+                "residual_observation_unit": row["residual_observation_unit"],
+                "standardized_residual": row["standardized_residual"],
+                "redundancy": row["redundancy"],
+                "removed": flagged,
+            }
+        )
+
+        if not flagged:
+            stopped_reason = "threshold_satisfied"
+            break
+        if max_removals is not None and len(removed) >= max_removals:
+            history[-1]["removed"] = False
+            stopped_reason = "max_removals"
+            break
+
+        candidate_active = active.copy()
+        candidate_active.pop(local_index)
+        if not candidate_active:
+            history[-1]["removed"] = False
+            stopped_reason = "insufficient_redundancy"
+            break
+
+        try:
+            candidate_result = adjust_control_network(
+                points,
+                [original[index] for index in candidate_active],
+                robust=False,
+                **adjustment_kwargs,
+            )
+        except (ValueError, KeyError, np.linalg.LinAlgError):
+            history[-1]["removed"] = False
+            stopped_reason = "insufficient_geometry"
+            break
+
+        if candidate_result.dof <= 0:
+            history[-1]["removed"] = False
+            stopped_reason = "insufficient_redundancy"
+            break
+
+        active = candidate_active
+        removed.append(global_index)
+
+    final_quality: list[dict[str, object]] = []
+    if final_result is not None:
+        current_observations = [original[index] for index in active]
+        for local_index, row in enumerate(
+            control_network_quality(
+                final_result,
+                current_observations,
+                threshold=threshold,
+            )
+        ):
+            final_quality.append({"original_index": active[local_index], **row})
+
+    return {
+        "result": final_result,
+        "removed_indices": removed,
+        "active_indices": active,
+        "history": history,
+        "quality": final_quality,
         "converged": stopped_reason == "threshold_satisfied",
         "stopped_reason": stopped_reason,
         "threshold": threshold,
