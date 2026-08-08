@@ -10,10 +10,14 @@ All notable changes to pySurveying are recorded here.
 - added a runnable reference example for the independent and correlated parameter-adjustment cases from 宋力杰《测量平差程序设计》
 - added `docs/STANDARD_EXAMPLES.md` to separate source-backed numerical examples from transparent synthetic regression datasets
 - added a structured public API reference in `docs/API.md`
+- added `docs/QUICKSTART.md`, `docs/FAQ.md`, `docs/ROADMAP.md`, and a documentation landing page
 - improved the Streamlit interface with a home page, built-in reference examples, control-network quality/precision output and downloadable result tables
-- expanded the README around installation, workflows, examples, documentation and project scope
-- added PyPI release documentation and a tag-triggered Trusted Publishing workflow
+- rebuilt the README around a product-style first screen, badges, 30-second start, core workflows, validation, documentation, contribution and citation entry points
+- added `CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, structured issue forms and a pull-request template
+- added `CITATION.cff` so GitHub can expose repository citation metadata
+- added TestPyPI-first and production PyPI Trusted Publishing workflows and release documentation
 - added package metadata/README validation with `twine check` in CI
+- release-preparation diagnostics now exercise 52 tests, runnable examples, Ruff, wheel/sdist build and metadata rendering
 
 ## 0.2.1
 
