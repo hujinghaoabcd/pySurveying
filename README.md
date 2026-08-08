@@ -21,15 +21,19 @@ pySurveying deliberately stays small. It is intended for common surveying calcul
 - weighted least-squares leveling-network adjustment
 - weighted linear least-squares adjustment
 - small 2D control-network adjustment using distance, direction/azimuth and angle observations
+- final-linearization `Qxx`, `Qvv`, redundancy numbers and per-observation quality tables for 2D control networks
+- iterative control-network gross-error localization with original observation indices preserved
 - minimum-norm 2D free-network adjustment
 - Huber robust linear adjustment
 - Huber robust control-network adjustment
+- Huber / IGG1 / IGG3 equivalent-weight robust linear adjustment
 - standardized residual screening, redundancy numbers and practical data snooping
 - 2D confidence error ellipses
 - CRS transformations through `pyproj`
 - WGS84 geodetic / ECEF / local ENU transformations
 - polar stakeout, straight-line offset, chainage/offset, slope, grade elevation and area
 - CSV, Excel, LandXML point and Leica GSI word import helpers
+- Excel adjustment export including residual-quality diagnostics when available
 - lightweight Streamlit interface
 
 The mathematical organization follows the classical surveying-adjustment workflow represented by *测量平差程序设计*, while NumPy/SciPy are used for numerical linear algebra instead of reimplementing low-level matrix routines.
@@ -64,7 +68,7 @@ Development:
 ```bash
 pip install -e ".[dev,ui]"
 python -m pytest
-python -m ruff check src tests
+python -m ruff check src tests examples
 python -m build
 ```
 
@@ -132,7 +136,12 @@ print(result.metadata["adjusted_heights"])
 
 ```python
 import math
-from pysurveying import Observation, Point, adjust_control_network
+from pysurveying import (
+    Observation,
+    Point,
+    adjust_control_network,
+    control_network_quality,
+)
 
 points = [
     Point("A", 0.0, 0.0, fixed=True),
@@ -149,9 +158,12 @@ observations = [
 
 result = adjust_control_network(points, observations)
 print(result.metadata["adjusted_points"])
+print(control_network_quality(result, observations))
 ```
 
-For Huber robust weighting, use `adjust_control_network_robust(...)`.
+For Huber robust weighting, use `adjust_control_network_robust(...)`. For repeated standardized-residual screening and re-adjustment, use `control_network_data_snooping(...)`. The latter is a practical computational gross-error search; the threshold remains the caller's statistical/design choice.
+
+A runnable quality-control example is provided in `examples/control_network_quality.py`.
 
 ### Coordinate transformation and ENU
 
@@ -179,10 +191,10 @@ src/pysurveying/
 ├── traverse.py     # traverse and angular closure
 ├── leveling.py     # leveling route and network
 ├── adjustment.py   # least squares and 2D control networks
-├── quality.py      # robust estimation, data snooping, error ellipses
+├── quality.py      # robust estimation, network quality, data snooping, ellipses
 ├── transform.py    # CRS / ECEF / ENU transformations
 ├── engineering.py  # stakeout, offsets, slopes, grade, area
-├── io.py           # CSV / XLSX / LandXML / GSI
+├── io.py           # CSV / XLSX / LandXML / GSI and result export
 ├── ui.py           # command entry point
 └── webapp.py       # Streamlit interface
 ```
@@ -198,7 +210,7 @@ src/pysurveying/
 
 ## Current limitations
 
-The package is still an early implementation. The control-network solver is aimed at small 2D networks, free-network results are minimum-norm solutions tied to the supplied approximate coordinates, and the Leica GSI parser intentionally exposes conservative low-level records rather than pretending to support every instrument template. Robust covariance is approximate. The residual screen is practical standardized-residual screening rather than a complete multiple-testing implementation of Baarda data snooping.
+The package is still an early implementation. The control-network solver is aimed at small 2D networks, and its `Qxx`/`Qvv`/redundancy diagnostics are based on the final local linearization. Free-network results are minimum-norm solutions tied to the supplied approximate coordinates, and the Leica GSI parser intentionally exposes conservative low-level records rather than pretending to support every instrument template. Robust covariance is approximate. Gross-error routines implement practical standardized-residual screening and repeated re-adjustment rather than a complete multiple-testing implementation of every Baarda-style design.
 
 For production legal/metrology work, independently verify observation conventions, units, datum definitions and tolerance rules.
 
