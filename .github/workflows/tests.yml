@@ -47,3 +47,6 @@ jobs:
 
       - name: Build distributions
         run: python -m build
+
+      - name: Check PyPI metadata and README rendering
+        run: python -m twine check dist/*
