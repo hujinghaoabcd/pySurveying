@@ -1,18 +1,77 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import numpy as np
 from scipy.optimize import least_squares as scipy_least_squares
 from scipy.stats import chi2
 
+from .adjustment import least_squares
 from .models import AdjustmentResult
+
+
+def equivalent_weight_factor(
+    value: float,
+    *,
+    method: str = "huber",
+    k0: float = 1.5,
+    k1: float = 2.5,
+) -> float:
+    """Return a classical surveying robust-equivalent weight factor.
+
+    The supported piecewise functions are Huber, IGG1 and IGG3. ``value`` is
+    expected to be a standardized residual. Huber needs only ``k0``; IGG1 and
+    IGG3 also use the rejection threshold ``k1``.
+    """
+    if k0 <= 0:
+        raise ValueError("k0 must be positive")
+    name = method.strip().lower()
+    if name not in {"huber", "igg1", "igg3"}:
+        raise ValueError("method must be 'huber', 'igg1', or 'igg3'")
+    if name != "huber" and k1 <= k0:
+        raise ValueError("k1 must be greater than k0 for IGG methods")
+
+    absolute = abs(float(value))
+    if absolute <= k0:
+        return 1.0
+    if name == "huber":
+        return k0 / absolute
+    if absolute >= k1:
+        return 0.0
+    if name == "igg1":
+        return k0 / absolute
+
+    taper = (k1 - absolute) / (k1 - k0)
+    return (k0 / absolute) * taper**2
+
+
+def equivalent_weight_factors(
+    values: Sequence[float] | np.ndarray,
+    *,
+    method: str = "huber",
+    k0: float = 1.5,
+    k1: float = 2.5,
+) -> np.ndarray:
+    """Vector form of :func:`equivalent_weight_factor`."""
+    array = np.asarray(values, dtype=float)
+    return np.asarray(
+        [
+            equivalent_weight_factor(value, method=method, k0=k0, k1=k1)
+            for value in array.reshape(-1)
+        ],
+        dtype=float,
+    ).reshape(array.shape)
 
 
 def robust_least_squares(
     A: np.ndarray, L: np.ndarray, f_scale: float = 1.0
 ) -> AdjustmentResult:
     """Solve a linear model using SciPy's Huber robust loss.
+
+    This compact convenience solver is retained for backwards compatibility. For
+    surveying-style equivalent-weight iteration with Huber/IGG1/IGG3 functions,
+    use :func:`robust_least_squares_irls`.
 
     The returned covariance is an approximate local covariance based on the final
     robust Jacobian. It should not be interpreted as classical least-squares
@@ -50,6 +109,121 @@ def robust_least_squares(
         solution.success,
         int(solution.nfev),
         metadata={"method": "huber", "f_scale": f_scale, "covariance_note": "approximate"},
+    )
+
+
+def robust_least_squares_irls(
+    A: np.ndarray,
+    L: np.ndarray,
+    *,
+    method: str = "huber",
+    k0: float = 1.5,
+    k1: float = 2.5,
+    max_iterations: int = 50,
+    tolerance: float = 1e-10,
+) -> AdjustmentResult:
+    """Surveying-style robust linear adjustment by equivalent-weight IRLS.
+
+    The initial ordinary least-squares solution supplies the residual standard
+    deviations ``sigma0 * sqrt(diag(Qvv))``. Standardized residuals are converted
+    to equivalent weights with Huber, IGG1, or IGG3, and the weighted adjustment
+    is repeated until the parameters stabilize.
+
+    The robust covariance is a local approximation based on the final equivalent
+    weights; it is not identical to classical least-squares covariance.
+    """
+    A = np.asarray(A, dtype=float)
+    L = np.asarray(L, dtype=float).reshape(-1)
+    if A.ndim != 2 or A.shape[0] != L.size:
+        raise ValueError("A rows must equal len(L)")
+    if A.shape[1] == 0:
+        raise ValueError("A must contain at least one unknown parameter")
+    if max_iterations < 1:
+        raise ValueError("max_iterations must be at least 1")
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive")
+
+    initial = least_squares(A, L)
+    if initial.sigma0 is None or initial.sigma0 <= 0:
+        raise ValueError("robust adjustment requires positive redundancy and sigma0")
+
+    qvv = np.asarray(initial.metadata["qvv"], dtype=float)
+    residual_sd = initial.sigma0 * np.sqrt(np.maximum(np.diag(qvv), 0.0))
+    valid_scale = residual_sd > np.finfo(float).eps
+    if not np.any(valid_scale):
+        raise ValueError("robust adjustment requires estimable residual variances")
+
+    x = np.asarray(initial.parameters, dtype=float).copy()
+    weights = np.ones(L.size, dtype=float)
+    standardized = np.zeros(L.size, dtype=float)
+    converged = False
+    iteration = 0
+
+    for iteration in range(1, max_iterations + 1):
+        residuals = A @ x - L
+        standardized.fill(0.0)
+        standardized[valid_scale] = residuals[valid_scale] / residual_sd[valid_scale]
+        weights = equivalent_weight_factors(
+            standardized,
+            method=method,
+            k0=k0,
+            k1=k1,
+        )
+        weights[~valid_scale] = 1.0
+
+        active = weights > np.finfo(float).eps
+        if np.count_nonzero(active) < A.shape[1]:
+            raise ValueError("robust weighting rejected too many observations")
+
+        sqrt_w = np.sqrt(weights)
+        weighted_A = A * sqrt_w[:, None]
+        weighted_L = L * sqrt_w
+        x_new = np.linalg.lstsq(weighted_A, weighted_L, rcond=None)[0]
+        if float(np.max(np.abs(x_new - x))) < tolerance:
+            x = x_new
+            converged = True
+            break
+        x = x_new
+
+    residuals = A @ x - L
+    standardized.fill(0.0)
+    standardized[valid_scale] = residuals[valid_scale] / residual_sd[valid_scale]
+    weights = equivalent_weight_factors(
+        standardized,
+        method=method,
+        k0=k0,
+        k1=k1,
+    )
+    weights[~valid_scale] = 1.0
+
+    active = weights > np.finfo(float).eps
+    rank = int(np.linalg.matrix_rank(A[active])) if np.any(active) else 0
+    dof = int(np.count_nonzero(active) - rank)
+    weighted_ss = float(np.sum(weights * residuals**2))
+    sigma0 = float(math.sqrt(weighted_ss / dof)) if dof > 0 else None
+    normal = A.T @ (weights[:, None] * A)
+    qxx = np.linalg.pinv(normal)
+    covariance = qxx if sigma0 is None else qxx * sigma0**2
+
+    return AdjustmentResult(
+        parameters=x,
+        residuals=residuals,
+        sigma0=sigma0,
+        covariance=covariance,
+        dof=dof,
+        converged=converged,
+        iterations=iteration,
+        metadata={
+            "method": method.lower(),
+            "k0": k0,
+            "k1": k1,
+            "robust_weights": weights,
+            "standardized_residuals": standardized.copy(),
+            "initial_sigma0": initial.sigma0,
+            "residual_sd": residual_sd,
+            "qxx": qxx,
+            "covariance_note": "approximate equivalent-weight covariance",
+        },
     )
 
 
@@ -96,7 +270,9 @@ def detect_outliers(result: AdjustmentResult, threshold: float = 3.0) -> list[in
     return np.flatnonzero(np.abs(standardized_residuals(result)) >= threshold).tolist()
 
 
-def data_snooping(result: AdjustmentResult, threshold: float = 3.0) -> list[dict[str, float | int | bool]]:
+def data_snooping(
+    result: AdjustmentResult, threshold: float = 3.0
+) -> list[dict[str, float | int | bool]]:
     """Return a compact residual-screening table.
 
     This is a practical standardized-residual screen rather than a full statistical
@@ -119,6 +295,113 @@ def data_snooping(result: AdjustmentResult, threshold: float = 3.0) -> list[dict
             }
         )
     return rows
+
+
+def iterative_data_snooping(
+    A: np.ndarray,
+    L: np.ndarray,
+    P: np.ndarray | Sequence[float] | None = None,
+    *,
+    threshold: float = 3.0,
+    max_removals: int | None = None,
+) -> dict[str, object]:
+    """Iteratively remove the largest standardized residual above a threshold.
+
+    Each cycle performs a fresh least-squares adjustment on the retained
+    observations, finds the largest absolute standardized residual, removes that
+    observation when it exceeds ``threshold``, and repeats. This mirrors the
+    classical surveying gross-error search workflow while deliberately leaving the
+    statistical choice of threshold to the caller.
+    """
+    A = np.asarray(A, dtype=float)
+    L = np.asarray(L, dtype=float).reshape(-1)
+    if A.ndim != 2 or A.shape[0] != L.size:
+        raise ValueError("A rows must equal len(L)")
+    if threshold <= 0:
+        raise ValueError("threshold must be positive")
+    if max_removals is not None and max_removals < 0:
+        raise ValueError("max_removals must be non-negative")
+
+    base_weights: np.ndarray | None = None
+    base_covariance: np.ndarray | None = None
+    if P is not None:
+        array = np.asarray(P, dtype=float)
+        if array.ndim == 1:
+            if array.size != L.size or np.any(array <= 0):
+                raise ValueError("weight vector must contain one positive value per observation")
+            base_weights = array
+        elif array.shape == (L.size, L.size):
+            if not np.allclose(array, array.T, atol=1e-12):
+                raise ValueError("P must be symmetric")
+            base_covariance = np.linalg.pinv(array)
+        else:
+            raise ValueError("P must be an n-vector or n×n matrix")
+
+    active = np.ones(L.size, dtype=bool)
+    removed: list[int] = []
+    history: list[dict[str, float | int | bool]] = []
+    stopped_reason = "threshold_satisfied"
+    final_result: AdjustmentResult | None = None
+
+    while True:
+        indices = np.flatnonzero(active)
+        if base_weights is not None:
+            current_P: np.ndarray | None = base_weights[indices]
+        elif base_covariance is not None:
+            covariance = base_covariance[np.ix_(indices, indices)]
+            current_P = np.linalg.pinv(covariance)
+        else:
+            current_P = None
+
+        final_result = least_squares(A[indices], L[indices], current_P)
+        standardized = standardized_residuals(final_result)
+        if standardized.size == 0:
+            stopped_reason = "no_observations"
+            break
+
+        local_index = int(np.argmax(np.abs(standardized)))
+        global_index = int(indices[local_index])
+        score = float(standardized[local_index])
+        flagged = bool(abs(score) >= threshold)
+        history.append(
+            {
+                "iteration": len(history) + 1,
+                "index": global_index,
+                "residual": float(final_result.residuals[local_index]),
+                "standardized_residual": score,
+                "removed": flagged,
+            }
+        )
+
+        if not flagged:
+            stopped_reason = "threshold_satisfied"
+            break
+        if max_removals is not None and len(removed) >= max_removals:
+            history[-1]["removed"] = False
+            stopped_reason = "max_removals"
+            break
+
+        candidate_active = active.copy()
+        candidate_active[global_index] = False
+        candidate_indices = np.flatnonzero(candidate_active)
+        candidate_rank = int(np.linalg.matrix_rank(A[candidate_indices]))
+        if candidate_indices.size <= candidate_rank:
+            history[-1]["removed"] = False
+            stopped_reason = "insufficient_redundancy"
+            break
+
+        active = candidate_active
+        removed.append(global_index)
+
+    return {
+        "result": final_result,
+        "removed_indices": removed,
+        "active_indices": np.flatnonzero(active).tolist(),
+        "history": history,
+        "converged": stopped_reason == "threshold_satisfied",
+        "stopped_reason": stopped_reason,
+        "threshold": threshold,
+    }
 
 
 def error_ellipse(
