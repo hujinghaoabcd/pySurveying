@@ -105,6 +105,14 @@ def _angle_difference(calculated: float, observed: float) -> float:
     return (calculated - observed + 180.0) % 360.0 - 180.0
 
 
+def _huber_weights(residuals: np.ndarray, k: float) -> np.ndarray:
+    absolute = np.abs(residuals)
+    weights = np.ones_like(absolute)
+    mask = absolute > k
+    weights[mask] = k / absolute[mask]
+    return weights
+
+
 def adjust_control_network(
     points: Sequence[Point],
     observations: Sequence[Observation],
@@ -112,6 +120,8 @@ def adjust_control_network(
     max_iterations: int = 20,
     tolerance: float = 1e-7,
     free_network: bool = False,
+    robust: bool = False,
+    huber_k: float = 1.5,
 ) -> AdjustmentResult:
     """Adjust a small 2D control network.
 
@@ -122,6 +132,8 @@ def adjust_control_network(
     - ``angle``: value and sigma use degrees; ``from_point`` is the station,
       ``to_point`` the backsight and ``target2`` the foresight.
 
+    All residuals are internally normalized by the observation standard deviation.
+    Set ``robust=True`` to apply Huber IRLS weights to the normalized residuals.
     For a free network, a minimum-norm pseudoinverse solution is used and the supplied
     approximate coordinates define the practical datum realization.
     """
@@ -135,6 +147,8 @@ def adjust_control_network(
         raise ValueError("fixed control is required unless free_network=True")
     if any(obs.sigma <= 0 for obs in observations):
         raise ValueError("all observation sigmas must be positive")
+    if huber_k <= 0:
+        raise ValueError("huber_k must be positive")
 
     values = _pack(point_map, names)
     n_parameters = values.size
@@ -162,6 +176,7 @@ def adjust_control_network(
 
     converged = False
     jacobian: np.ndarray | None = None
+    final_weights = np.ones(len(observations), dtype=float)
     iteration = 0
     for iteration in range(1, max_iterations + 1):
         residuals = residual_vector(values)
@@ -174,20 +189,27 @@ def adjust_control_network(
             minus[column] -= step
             jacobian[:, column] = (residual_vector(plus) - residual_vector(minus)) / (2.0 * step)
 
-        correction = -np.linalg.pinv(jacobian) @ residuals
+        final_weights = _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
+        sqrt_w = np.sqrt(final_weights)
+        weighted_jacobian = jacobian * sqrt_w[:, None]
+        weighted_residuals = residuals * sqrt_w
+        correction = -np.linalg.pinv(weighted_jacobian) @ weighted_residuals
         values = values + correction
         if float(np.max(np.abs(correction))) < tolerance:
             converged = True
             break
 
     residuals = residual_vector(values)
+    final_weights = _huber_weights(residuals, huber_k) if robust else np.ones_like(residuals)
     rank = int(np.linalg.matrix_rank(jacobian)) if jacobian is not None else 0
     dof = int(residuals.size - rank)
-    sigma0 = float(math.sqrt((residuals @ residuals) / dof)) if dof > 0 else None
+    weighted_ss = float(np.sum(final_weights * residuals**2))
+    sigma0 = float(math.sqrt(weighted_ss / dof)) if dof > 0 else None
     covariance = None
     qxx = None
     if jacobian is not None:
-        qxx = np.linalg.pinv(jacobian.T @ jacobian)
+        normal = jacobian.T @ (final_weights[:, None] * jacobian)
+        qxx = np.linalg.pinv(normal)
         covariance = qxx if sigma0 is None else qxx * sigma0**2
 
     adjusted_points: dict[str, tuple[float, float]] = {}
@@ -209,10 +231,30 @@ def adjust_control_network(
             "point_order": names,
             "adjusted_points": adjusted_points,
             "free_network": free_network,
+            "robust": robust,
+            "huber_k": huber_k,
+            "robust_weights": final_weights,
             "rank": rank,
             "qxx": qxx,
             "residual_scale": "normalized_by_observation_sigma",
         },
+    )
+
+
+def adjust_control_network_robust(
+    points: Sequence[Point],
+    observations: Sequence[Observation],
+    *,
+    huber_k: float = 1.5,
+    **kwargs,
+) -> AdjustmentResult:
+    """Convenience wrapper for Huber robust 2D control-network adjustment."""
+    return adjust_control_network(
+        points,
+        observations,
+        robust=True,
+        huber_k=huber_k,
+        **kwargs,
     )
 
 
