@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use pySurveying in academic or technical work, please cite this software."
+title: "pySurveying: Lightweight surveying computation, adjustment, quality control, and visualization for Python"
+type: software
+authors:
+  - family-names: Hu
+    given-names: Jinghao
+version: 0.3.0
+repository-code: "https://github.com/hujinghaoabcd/pySurveying"
+url: "https://github.com/hujinghaoabcd/pySurveying"
+license: MIT
+keywords:
+  - surveying
+  - geomatics
+  - geodesy
+  - least-squares adjustment
+  - control network
+  - traverse
+  - leveling
+  - robust estimation
+  - error ellipse
+  - coordinate transformation
